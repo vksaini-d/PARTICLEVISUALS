@@ -2,8 +2,8 @@
 
 **A high-performance, audio-reactive particle simulation web application built with Three.js and GPGPU.**
 
-![Particle Visuals Banner](https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?q=80&w=2072&auto=format&fit=crop)
-_(Note: Replace the above image with a screenshot of your actual application for the best effect)_
+<img   src="https://github.com/user-attachments/assets/b63e1c60-b430-44b9-a0ea-4552b32283a9" alt="banner image" style="width: 100%; height: auto; border-radius: 15px;" />
+
 
 ## 🚀 About the Project
 
