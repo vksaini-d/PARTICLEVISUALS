@@ -276,6 +276,7 @@ input[type="text"]::placeholder {
   font-size: 0.7rem;
 }
 
+
 /* Scrollbar for settings */
 #settings-panel::-webkit-scrollbar {
   width: 4px;
@@ -287,3 +288,265 @@ input[type="text"]::placeholder {
   background: rgba(255, 255, 255, 0.2);
   border-radius: 2px;
 }
+
+/* ========================================
+   RESPONSIVE DESIGN - MOBILE OPTIMIZATION
+   ======================================== */
+
+/* Tablets (Portrait) - iPad, Android Tablets */
+@media only screen and (max-width: 1024px) and (orientation: portrait) {
+  #controls-panel {
+    max-width: 90vw;
+    max-height: 60vh;
+    font-size: 0.9rem;
+  }
+  
+  .category-buttons {
+    gap: 6px;
+  }
+  
+  button {
+    padding: 8px 14px;
+    font-size: 0.7rem;
+  }
+  
+  #settings-panel {
+    width: 200px;
+    max-height: 70vh;
+  }
+  
+  #info-bar {
+    font-size: 0.65rem;
+    max-width: 90%;
+  }
+}
+
+/* Tablets (Landscape) */
+@media only screen and (max-width: 1024px) and (orientation: landscape) {
+  #controls-panel {
+    max-width: 50vw;
+    max-height: 70vh;
+  }
+  
+  #info-bar {
+    bottom: 10px;
+    left: 10px;
+    font-size: 0.6rem;
+  }
+}
+
+/* Smartphones (Portrait) - iPhone, Android Phones */
+@media only screen and (max-width: 768px) and (orientation: portrait) {
+  #controls-toggle {
+    top: 10px;
+    left: 10px;
+    padding: 10px 14px;
+    font-size: 0.7rem;
+  }
+  
+  #controls-toggle svg {
+    width: 18px;
+    height: 18px;
+  }
+  
+  #controls-panel {
+    top: 60px;
+    left: 10px;
+    right: 10px;
+    max-width: calc(100vw - 20px);
+    max-height: 65vh;
+    padding: 15px;
+  }
+  
+  .panel-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+  }
+  
+  .panel-title {
+    font-size: 0.85rem;
+  }
+  
+  .controls {
+    max-height: 50vh;
+  }
+  
+  .category-title {
+    font-size: 0.6rem;
+    margin-bottom: 6px;
+  }
+  
+  .category-buttons {
+    gap: 5px;
+  }
+  
+  button {
+    padding: 8px 12px;
+    font-size: 0.65rem;
+    border-radius: 6px;
+  }
+  
+  #settings-btn {
+    top: 10px;
+    right: 10px;
+    padding: 8px;
+  }
+  
+  #settings-btn svg {
+    width: 20px;
+    height: 20px;
+  }
+  
+  #settings-panel {
+    top: 55px;
+    right: 10px;
+    width: calc(100vw - 20px);
+    max-width: 300px;
+    max-height: 60vh;
+    padding: 12px;
+  }
+  
+  .color-option {
+    padding: 10px 8px;
+  }
+  
+  .option-label {
+    font-size: 0.75rem;
+  }
+  
+  #info-bar {
+    display: none; /* Hide on small screens to save space */
+  }
+  
+  #stats {
+    bottom: 10px;
+    left: 10px;
+    font-size: 0.6rem;
+  }
+  
+  #textInput input[type="text"] {
+    width: 100%;
+    font-size: 0.75rem;
+  }
+}
+
+/* Smartphones (Landscape) */
+@media only screen and (max-width: 896px) and (orientation: landscape) {
+  #controls-panel {
+    top: 60px;
+    left: 10px;
+    max-width: 45vw;
+    max-height: 75vh;
+  }
+  
+  #settings-panel {
+    max-height: 75vh;
+  }
+  
+  #info-bar {
+    display: none;
+  }
+}
+
+/* Small Smartphones (iPhone SE, older Android) */
+@media only screen and (max-width: 480px) {
+  #controls-toggle {
+    padding: 8px 12px;
+    font-size: 0.65rem;
+  }
+  
+  #controls-toggle span {
+    display: none; /* Hide "Shapes" text on very small screens */
+  }
+  
+  #controls-panel {
+    padding: 12px;
+    max-height: 70vh;
+  }
+  
+  .panel-title {
+    font-size: 0.8rem;
+  }
+  
+  .category-title {
+    font-size: 0.55rem;
+  }
+  
+  button {
+    padding: 7px 10px;
+    font-size: 0.6rem;
+  }
+  
+  .color-option {
+    padding: 8px 6px;
+  }
+  
+  .option-label {
+    font-size: 0.7rem;
+  }
+  
+  .color-preview {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+/* iPad Pro (Portrait & Landscape) */
+@media only screen 
+  and (min-width: 1024px) 
+  and (max-width: 1366px) 
+  and (-webkit-min-device-pixel-ratio: 2) {
+  
+  #controls-panel {
+    max-width: 650px;
+  }
+  
+  button {
+    padding: 8px 16px;
+    font-size: 0.7rem;
+  }
+}
+
+/* Touch-friendly enhancements for all mobile devices */
+@media (hover: none) and (pointer: coarse) {
+  button {
+    min-height: 44px; /* Apple's recommended touch target size */
+    min-width: 44px;
+  }
+  
+  .color-option {
+    min-height: 44px;
+  }
+  
+  #controls-toggle {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  #settings-btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Prevent text selection on touch devices */
+  * {
+    -webkit-tap-highlight-color: rgba(255, 255, 255, 0.1);
+    -webkit-touch-callout: none;
+    user-select: none;
+  }
+  
+  input[type="text"] {
+    user-select: text;
+    -webkit-user-select: text;
+  }
+}
+
+/* High DPI displays (Retina) */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  button, .color-option, .panel-title {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
