@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PARTICLE VISUALS</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- Controls Toggle Button -->
+<button id="controls-toggle" class="open" onclick="toggleControls()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M4 6h16M4 12h16M4 18h16"/>
+    </svg>
+    <span>Shapes</span>
+</button>
+
+<!-- Controls Panel -->
+<div id="controls-panel">
+    <div class="panel-header">
+        <div class="panel-title">Select Shape</div>
+        <div style="font-size: 0.7rem; color: rgba(255, 255, 255, 0.4);">360k Particles</div>
+    </div>
+    
+    <div class="controls">
+        <!-- Basic Shapes -->
+        <div class="shape-category">
+            <div class="category-title">⬡ Basic Shapes</div>
+            <div class="category-buttons">
+                <button onclick="setShape(0)" class="active" id="btn-0">Sphere</button>
+                <button onclick="setShape(1)" id="btn-1">Cube</button>
+                <button onclick="setShape(2)" id="btn-2">Torus</button>
+                <button onclick="setShape(3)" id="btn-3">Fluid</button>
+                <button onclick="setShape(4)" id="btn-4">Text</button>
+            </div>
+        </div>
+
+        <!-- Space Objects -->
+        <div class="shape-category">
+            <div class="category-title">🌍 Space Objects</div>
+            <div class="category-buttons">
+                <button onclick="setShape(18)" id="btn-18">Solar System</button>
+                <button onclick="setShape(9)" id="btn-9">Saturn</button>
+                <button onclick="setShape(19)" id="btn-19">Black Hole</button>
+                <button onclick="setShape(15)" id="btn-15">Binary Stars</button>
+            </div>
+        </div>
+
+        <!-- Cosmic Phenomena -->
+        <div class="shape-category">
+            <div class="category-title">✨ Cosmic Phenomena</div>
+            <div class="category-buttons">
+                <button onclick="setShape(6)" id="btn-6">Galaxy</button>
+                <button onclick="setShape(10)" id="btn-10">Nebula</button>
+                <button onclick="setShape(11)" id="btn-11">Supernova</button>
+                <button onclick="setShape(12)" id="btn-12">Quasar</button>
+                <button onclick="setShape(13)" id="btn-13">Pillars</button>
+                <button onclick="setShape(20)" id="btn-20">Flare</button>
+                <button onclick="setShape(21)" id="btn-21">Collision</button>
+                <button onclick="setShape(17)" id="btn-17">Dark Matter</button>
+                <button onclick="setShape(16)" id="btn-16">Wormhole</button>
+            </div>
+        </div>
+
+        <!-- Celestial Objects (NEW) -->
+        <div class="shape-category">
+            <div class="category-title">🌌 Celestial Objects</div>
+            <div class="category-buttons">
+                <button onclick="setShape(28)" id="btn-28">Orion Nebula</button>
+                <button onclick="setShape(29)" id="btn-29">Crab Nebula</button>
+                <button onclick="setShape(30)" id="btn-30">Andromeda</button>
+                <button onclick="setShape(31)" id="btn-31">Saturn+Rings</button>
+                <button onclick="setShape(32)" id="btn-32">Horsehead</button>
+                <button onclick="setShape(33)" id="btn-33">Helix Nebula</button>
+                <button onclick="setShape(34)" id="btn-34">Hubble Field</button>
+                <button onclick="setShape(35)" id="btn-35">SNR N49</button>
+                <button onclick="setShape(36)" id="btn-36">Rosette</button>
+            </div>
+        </div>
+
+        <!-- Advanced Math -->
+        <div class="shape-category">
+            <div class="category-title">🔬 Advanced Math</div>
+            <div class="category-buttons">
+                <button onclick="setShape(5)" id="btn-5">Tesseract (4D)</button>
+                <button onclick="setShape(8)" id="btn-8">Möbius Strip</button>
+                <button onclick="setShape(24)" id="btn-24">Klein Bottle</button>
+                <button onclick="setShape(14)" id="btn-14">Web</button>
+            </div>
+        </div>
+
+        <!-- Nature & Other -->
+        <div class="shape-category">
+            <div class="category-title">🌳 Nature & Other</div>
+            <div class="category-buttons">
+                <button onclick="setShape(7)" id="btn-7">DNA</button>
+                <button onclick="setShape(23)" id="btn-23">Banyan Tree</button>
+                <button onclick="setShape(22)" id="btn-22">Human Face</button>
+                <button onclick="setShape(25)" id="btn-25">Atomic Model</button>
+                <button onclick="setShape(26)" id="btn-26">Hourglass</button>
+                <button onclick="setShape(27)" id="btn-27">Waveform</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="textInput" style="display:none; margin-top: 15px;">
+        <input type="text" id="nameInput" placeholder="Enter text..." maxlength="15">
+        <button onclick="updateText()" style="margin-left: 5px;">Apply</button>
+    </div>
+</div>
+
+<!-- Info Bar (always visible) -->
+<div id="info-bar" style="position: absolute; bottom: 20px; left: 20px; color: rgba(255, 255, 255, 0.4); font-size: 0.7rem; pointer-events: none; max-width: 80%;">
+    <div><b>Controls:</b> Left Click: Black Hole | Right Click: Gravity Well | Move Fast: Force Push | Scroll: Time | Mic: Blow</div>
+</div>
+
+<!-- Settings Button (Gear Icon) -->
+<button id="settings-btn" onclick="toggleSettings()">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+    </svg>
+</button>
+
+<!-- Settings Panel -->
+<div id="settings-panel">
+    <div class="section-title">Classic</div>
+    <div class="color-option" onclick="setTheme(0)">
+        <div class="color-preview" style="background: linear-gradient(45deg, #ff00ff, #00ff00);"></div>
+        <span class="option-label">Neon</span>
+    </div>
+    <div class="color-option" onclick="setTheme(17)">
+        <div class="color-preview" style="background: linear-gradient(45deg, #000000, #000044, #ff00ff);"></div>
+        <span class="option-label">Deep Space (NASA)</span>
+    </div>
+    <div class="color-option" onclick="setTheme(15)">
+        <div class="color-preview" style="background: linear-gradient(45deg, #0000ff, #ffff00);"></div>
+        <span class="option-label">Kinetic (Speed)</span>
+    </div>
+    <div class="color-option" onclick="setTheme(16)">
+        <div class="color-preview" style="background: linear-gradient(45deg, #ffffff, #00ffff, #ff00ff);"></div>
+        <span class="option-label">Iridescence</span>
+    </div>
+    <div class="color-option" onclick="setTheme(1)">
+        <div class="color-preview" style="background: linear-gradient(45deg, #ff4400, #ffcc00);"></div>
+        <span class="option-label">Fire</span>
+    </div>
+    <div class="color-option" onclick="setTheme(2)">
+        <div class="color-preview" style="background: linear-gradient(45deg, #00ffff, #ffffff);"></div>
+        <span class="option-label">Ice</span>
+    </div>
+    <div class="color-option" onclick="setTheme(3)">
+        <div class="color-preview" style="background: linear-gradient(45deg, #00ff00, #ffff00);"></div>
+        <span class="option-label">Nature</span>
+    </div>
+    <div class="color-option" onclick="setTheme(4)">
+        <div class="color-preview" style="background: #00ff00;"></div>
+        <span class="option-label">Matrix</span>
+    </div>
+    
+    <div class="section-title">Movies</div>
+    <div class="color-option" onclick="setTheme(5)">
+        <div class="color-preview" style="background: linear-gradient(45deg, #00ffff, #ff9900);"></div>
+        <span class="option-label">Tron</span>
+    </div>
+    <div class="color-option" onclick="setTheme(11)">
+        <div class="color-preview" style="background: linear-gradient(45deg, #ff0000, #333333);"></div>
+        <span class="option-label">Tron: Ares</span>
+    </div>
+    <div class="color-option" onclick="setTheme(6)">
+        <div class="color-preview" style="background: linear-gradient(45deg, #ff00cc, #ffb6c1);"></div>
+        <span class="option-label">Barbie</span>
+    </div>
+    <div class="color-option" onclick="setTheme(7)">
+        <div class="color-preview" style="background: linear-gradient(45deg, #ff9900, #00aaff);"></div>
+        <span class="option-label">Dune</span>
+    </div>
+    <div class="color-option" onclick="setTheme(8)">
+        <div class="color-preview" style="background: linear-gradient(45deg, #8800ff, #00ffff);"></div>
+        <span class="option-label">Blade Runner</span>
+    </div>
+    <div class="color-option" onclick="setTheme(9)">
+        <div class="color-preview" style="background: linear-gradient(45deg, #ff0000, #0000ff);"></div>
+        <span class="option-label">Star Wars</span>
+    </div>
+
+    <div class="section-title">TV Series</div>
+    <div class="color-option" onclick="setTheme(10)">
+        <div class="color-preview" style="background: linear-gradient(45deg, #00aaff, #ff4400);"></div>
+        <span class="option-label">Game of Thrones</span>
+    </div>
+    <div class="color-option" onclick="setTheme(13)">
+        <div class="color-preview" style="background: linear-gradient(45deg, #aa0000, #000000);"></div>
+        <span class="option-label">Stranger Things</span>
+    </div>
+    <div class="color-option" onclick="setTheme(12)">
+        <div class="color-preview" style="background: linear-gradient(45deg, #00ffff, #ffff00);"></div>
+        <span class="option-label">Breaking Bad</span>
+    </div>
+    <div class="color-option" onclick="setTheme(14)">
+        <div class="color-preview" style="background: linear-gradient(45deg, #ff0088, #00ff88);"></div>
+        <span class="option-label">Squid Game</span>
+    </div>
+    <div class="color-option" onclick="setTheme(19)">
+        <div class="color-preview" style="background: linear-gradient(45deg, #000044, #00ff88);"></div>
+        <span class="option-label">Biolum</span>
+    </div>
+    <div class="color-option" onclick="setTheme(20)">
+        <div class="color-preview" style="background: linear-gradient(45deg, #220044, #ff8800);"></div>
+        <span class="option-label">Synthwave</span>
+    </div>
+    <div class="color-option" onclick="setTheme(21)">
+        <div class="color-preview" style="background: linear-gradient(45deg, #ff00ff, #00ffff);"></div>
+        <span class="option-label">Glitch</span>
+    </div>
+    <div class="color-option" onclick="setTheme(22)">
+        <div class="color-preview" style="background: linear-gradient(45deg, #ffcc00, #ff8800);"></div>
+        <span class="option-label">Golden Hour</span>
+    </div>
+
+    <div class="section-title">Celestial (NEW)</div>
+    <div class="color-option" onclick="setTheme(23)">
+        <div class="color-preview" style="background: linear-gradient(45deg, #ff0044, #00ff88, #0088ff);"></div>
+        <span class="option-label">Orion Nebula</span>
+    </div>
+    <div class="color-option" onclick="setTheme(24)">
+        <div class="color-preview" style="background: linear-gradient(45deg, #ff4400, #ffcc00, #0088ff);"></div>
+        <span class="option-label">Crab Nebula</span>
+    </div>
+    <div class="color-option" onclick="setTheme(25)">
+        <div class="color-preview" style="background: linear-gradient(45deg, #ffee88, #4488ff);"></div>
+        <span class="option-label">Andromeda</span>
+    </div>
+    <div class="color-option" onclick="setTheme(26)">
+        <div class="color-preview" style="background: linear-gradient(45deg, #ffdd88, #ffffff);"></div>
+        <span class="option-label">Saturn</span>
+    </div>
+    <div class="color-option" onclick="setTheme(27)">
+        <div class="color-preview" style="background: linear-gradient(45deg, #000000, #880000);"></div>
+        <span class="option-label">Horsehead</span>
+    </div>
+    <div class="color-option" onclick="setTheme(28)">
+        <div class="color-preview" style="background: linear-gradient(45deg, #00ff88, #ff8800);"></div>
+        <span class="option-label">Helix Nebula</span>
+    </div>
+    <div class="color-option" onclick="setTheme(29)">
+        <div class="color-preview" style="background: linear-gradient(45deg, #4488ff, #ffee88, #ff8844);"></div>
+        <span class="option-label">Hubble Field</span>
+    </div>
+    <div class="color-option" onclick="setTheme(30)">
+        <div class="color-preview" style="background: linear-gradient(45deg, #ffffff, #ff4444);"></div>
+        <span class="option-label">SNR N49</span>
+    </div>
+    <div class="color-option" onclick="setTheme(31)">
+        <div class="color-preview" style="background: linear-gradient(45deg, #ff0022, #ff4466);"></div>
+        <span class="option-label">Rosette</span>
+    </div>
+</div>
+
+<div id="stats">GPGPU | GLSL Physics</div>
+
+<!-- Import Three.js as a module -->
+<script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+      "lil-gui": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/lil-gui.module.min.js"
+    }
+  }
+</script>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
