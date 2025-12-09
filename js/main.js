@@ -331,6 +331,9 @@ const mouse = new THREE.Vector2(-1000, -1000);
 const raycaster = new THREE.Raycaster();
 const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
 
+// Loading screen flag
+let isFirstFrame = true;
+
 // PHASE 5: Gravity Wells
 let gravityWells = []; // Array of {position: Vector3, strength: float}
 const MAX_WELLS = 5;
@@ -565,8 +568,6 @@ async function init() {
   window.addEventListener("wheel", (e) => {
     params.timeScale += e.deltaY * -0.001;
     params.timeScale = Math.max(0.1, Math.min(5.0, params.timeScale));
-    if (gui)
-      gui.controllers.find((c) => c.property === "timeScale").updateDisplay();
   });
   
   // Restore user preferences after uniforms are initialized
@@ -579,17 +580,6 @@ async function init() {
 
   // Start animation loop
   animate();
-  
-  // Hide loading screen immediately after first frame renders
-  // This shows the initial 16k particles instantly, then upgrades happen in background
-  requestAnimationFrame(() => {
-    const loadingScreen = document.getElementById('loading-screen');
-    if (loadingScreen) {
-      loadingScreen.style.opacity = '0';
-      loadingScreen.style.transition = 'opacity 0.3s';
-      setTimeout(() => loadingScreen.remove(), 300);
-    }
-  });
 }
 
 // ============================================================================
@@ -784,10 +774,8 @@ async function fillTextures(texturePosition, textureVelocity) {
       loadingText.textContent = `Generating ${(totalParticles / 1000).toFixed(0)}k particles... ${Math.min(percent, 100)}%`;
     }
 
-    // Yield to main thread only for large particle counts (prevents browser freeze)
-    if (totalParticles > 100000) {
-      await new Promise(resolve => setTimeout(resolve, 0));
-    }
+    // Always yield to main thread to allow browser to update UI
+    await new Promise(resolve => setTimeout(resolve, 0));
   }
   
   // Final update
@@ -1099,6 +1087,17 @@ function generateTextTexture(text) {
 
 async function animate() { // Changed to async to support await
   requestAnimationFrame(animate);
+  
+  // Hide loading screen on first frame
+  if (isFirstFrame) {
+    isFirstFrame = false;
+    const loadingScreen = document.getElementById('loading-screen');
+    if (loadingScreen) {
+      loadingScreen.style.opacity = '0';
+      loadingScreen.style.transition = 'opacity 0.3s';
+      setTimeout(() => loadingScreen.remove(), 300);
+    }
+  }
   
   // ============================================================================
   // ADAPTIVE RESOLUTION MONITORING
