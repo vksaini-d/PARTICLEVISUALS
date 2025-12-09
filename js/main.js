@@ -68,16 +68,23 @@ class ResolutionManager {
       deviceTier: 'Medium'
     };
     
-    // Detect GPU via WebGL
+    // Detect GPU via WebGL (with fallback for deprecated extension)
     try {
       const canvas = document.createElement('canvas');
       const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
       
       if (gl) {
+        // Try to get debug info, but handle deprecation gracefully
         const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
         if (debugInfo) {
-          profile.gpuVendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
-          profile.gpuRenderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+          try {
+            profile.gpuVendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) || 'Unknown';
+            profile.gpuRenderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) || 'Unknown';
+          } catch (e) {
+            // Extension exists but deprecated - use RENDERER as fallback
+            profile.gpuRenderer = gl.getParameter(gl.RENDERER) || 'Unknown';
+            profile.gpuVendor = gl.getParameter(gl.VENDOR) || 'Unknown';
+          }
           
           // Estimate GPU memory from renderer string
           const renderer = profile.gpuRenderer.toLowerCase();
@@ -94,6 +101,10 @@ class ResolutionManager {
           } else if (renderer.includes('intel') && renderer.includes('iris')) {
             profile.gpuMemoryGB = 2; // Integrated graphics
           }
+        } else {
+          // Extension not available - use standard WebGL parameters
+          profile.gpuRenderer = gl.getParameter(gl.RENDERER) || 'Unknown';
+          profile.gpuVendor = gl.getParameter(gl.VENDOR) || 'Unknown';
         }
       }
     } catch (e) {
@@ -289,21 +300,23 @@ let lastPhysicsTime = performance.now();
 // ============================================================================
 async function initVisitorCounter() {
   try {
-    // Using CountAPI.xyz - free, no signup required
-    const namespace = 'particlevisuals';
-    const key = 'visitors';
+    // Use localStorage for a simple local visitor counter
+    let visits = parseInt(localStorage.getItem('particle_visits') || '0');
+    visits++;
+    localStorage.setItem('particle_visits', visits.toString());
     
-    // Increment and get count
-    const response = await fetch(`https://api.countapi.xyz/hit/${namespace}/${key}`);
-    const data = await response.json();
-    
-    if (data.value) {
-      document.getElementById('visitor-count').textContent = data.value.toLocaleString();
-      console.log(`👁️ Total observers: ${data.value}`);
+    // Display local visit count
+    const counterElement = document.getElementById('visitor-count');
+    if (counterElement) {
+      counterElement.textContent = visits.toLocaleString();
+      console.log(`👁️ Your visits: ${visits}`);
     }
   } catch (error) {
     console.warn('Visitor counter failed:', error);
-    document.getElementById('visitor-count').textContent = '∞';
+    const counterElement = document.getElementById('visitor-count');
+    if (counterElement) {
+      counterElement.textContent = '∞';
+    }
   }
 }
 
