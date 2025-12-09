@@ -140,7 +140,7 @@ export class GPUComputationRenderer {
                 minFilter: minFilter || THREE.NearestFilter,
                 magFilter: magFilter || THREE.NearestFilter,
                 format: THREE.RGBAFormat,
-                type: THREE.HalfFloatType,
+                type: THREE.FloatType,
                 depthBuffer: false,
                 stencilBuffer: false // Ensure no extra buffers
             });
@@ -153,5 +153,20 @@ export class GPUComputationRenderer {
             renderer.render(scene, camera);
             passThruUniforms.passThruTexture.value = null;
         }
+        this.dispose = function() {
+            mesh.geometry.dispose();
+            mesh.material.dispose();
+            
+            for (let i = 0; i < this.variables.length; i++) {
+                const variable = this.variables[i];
+                if (variable.initialValueTexture) variable.initialValueTexture.dispose();
+                variable.material.dispose();
+                if (variable.renderTargets) {
+                    variable.renderTargets[0].dispose();
+                    variable.renderTargets[1].dispose();
+                }
+            }
+            this.variables = [];
+        };
     }
 }

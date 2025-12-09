@@ -3,6 +3,26 @@ import { GPUComputationRenderer } from "./GPUComputationRenderer.js";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { GUI } from "lil-gui";
+
+// Global Error Handler to catch crash-inducing errors
+window.onerror = function(message, source, lineno, colno, error) {
+  console.error("Global Error Caught:", message, error);
+  const loadingScreen = document.getElementById('loading-screen');
+  if (loadingScreen) {
+    loadingScreen.innerHTML = `
+        <div style="text-align: center; color: #ff5555; font-family: sans-serif;">
+            <div style="font-size: 2rem; margin-bottom: 1rem;">💥</div>
+            <div>Application Error</div>
+            <div style="font-size: 0.8rem; margin-top: 0.5rem; opacity: 0.8; max-width: 300px; word-wrap: break-word;">${message}</div>
+             <div style="font-size: 0.7rem; margin-top: 1rem; opacity: 0.6;">Line: ${lineno}</div>
+        </div>`;
+    // Ensure it's visible if it was fading out
+    loadingScreen.style.opacity = '1';
+    loadingScreen.style.display = 'flex';
+  }
+};
+
 import {
   velocityFragmentShader,
   positionFragmentShader,
@@ -327,6 +347,7 @@ let params = {
   timeScale: 1.0,
 };
 let composer; // Post-processing
+let gui; // GUI Settings
 const mouse = new THREE.Vector2(-1000, -1000);
 const raycaster = new THREE.Raycaster();
 const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
@@ -377,17 +398,54 @@ async function init() {
   initVisitorCounter();
   
   const container = document.body;
+  
+  // Force GPU usage with optimized WebGL context
+  const canvas = document.createElement('canvas');
+  const contextAttributes = {
+    alpha: false,
+    antialias: false, // Disable for better performance, use post-processing instead
+    depth: false,
+    stencil: false,
+    powerPreference: 'high-performance',
+    failIfMajorPerformanceCaveat: false,
+    desynchronized: true, // Reduce latency, improve GPU utilization
+    preserveDrawingBuffer: false
+  };
+  
+  // Try to get WebGL2 context first (better GPU utilization)
+  const gl = canvas.getContext('webgl2', contextAttributes) || 
+             canvas.getContext('webgl', contextAttributes);
+  
+  if (!gl) {
+    console.error('WebGL not supported');
+    return;
+  }
+  
+  console.log(`🎮 Using ${gl instanceof WebGL2RenderingContext ? 'WebGL2' : 'WebGL'} with GPU acceleration`);
+  
   renderer = new THREE.WebGLRenderer({
-    antialias: true,
+    canvas: canvas,
+    context: gl,
+    antialias: false, // Disabled for performance
     powerPreference: "high-performance",
     stencil: false,
     depth: false,
+    alpha: false,
+    logarithmicDepthBuffer: false,
+    precision: 'highp' // Force high precision on GPU
   });
-  renderer.setPixelRatio(window.devicePixelRatio);
+  
+  // Optimize renderer settings for GPU
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Cap at 2x for performance
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.2; // Boost brightness for contrast
+  renderer.toneMappingExposure = 1.2;
+  renderer.sortObjects = false; // Disable CPU sorting
+  renderer.autoClear = true;
+  
   container.appendChild(renderer.domElement);
+  
+  console.log('✅ GPU-accelerated renderer initialized');
 
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x000000); // Pure black
@@ -404,8 +462,9 @@ async function init() {
   const renderScene = new RenderPass(scene, camera);
 
   // Bloom - High Contrast Configuration
+  // Bloom - High Contrast Configuration with Optimized Resolution
   bloomPass = new UnrealBloomPass(
-    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2), // Half resolution for speed
     1.5,
     0.4,
     0.85
@@ -447,7 +506,7 @@ async function init() {
   velocityUniforms.uMouse = { value: new THREE.Vector3(0, 0, 0) };
   velocityUniforms.uMouseActive = { value: 0.0 };
   velocityUniforms.uClick = { value: 0.0 }; // Black Hole Trigger
-  velocityUniforms.uClick = { value: 0.0 }; // Black Hole Trigger
+  velocityUniforms.uReset = { value: 1.0 }; // Start with RESET enabled for instant init
   velocityUniforms.textTexture = { value: new THREE.Texture() };
   velocityUniforms.uSound = { value: 0.0 }; // Audio Reactivity
   velocityUniforms.uBass = { value: 0.0 };
@@ -462,11 +521,23 @@ async function init() {
 
   const error = gpuCompute.init();
   if (error !== null) {
-    console.error(error);
-    document.getElementById(
-      "ui"
-    ).innerHTML = `<h1 style="color:red">Error: ${error}</h1>`;
+      console.error(error);
+      const loadingScreen = document.getElementById('loading-screen');
+      if (loadingScreen) {
+          loadingScreen.innerHTML = `
+            <div style="text-align: center; color: #ff5555;">
+                <div style="font-size: 2rem; margin-bottom: 1rem;">⚠️</div>
+                <div>GPU Initialization Failed</div>
+                <div style="font-size: 0.8rem; margin-top: 0.5rem; opacity: 0.8;">${error}</div>
+            </div>`;
+      }
+      return; 
   }
+
+  // --- INSTANT GPU INITIALIZATION ---
+  // Run one frame with uReset=1 to generate random positions on GPU
+  gpuCompute.compute();
+  velocityUniforms.uReset.value = 0.0; // Turn off reset for normal physics
 
   const geometry = new THREE.BufferGeometry();
   const positions = new Float32Array(PARTICLES * 3);
@@ -570,12 +641,26 @@ async function init() {
     params.timeScale = Math.max(0.1, Math.min(5.0, params.timeScale));
   });
   
+  // Initialize GUI
+  initGUI(bloomPass);
+
   // Restore user preferences after uniforms are initialized
   restoreUserPreferences();
   
   // Start progressive upgrade for desktop (mobile stays at 200x200)
   if (!isMobile && targetTierIndex > 0) {
     resolutionManager.startProgressiveUpgrade(targetTierIndex);
+  }
+
+  // Force remove loading screen (it should say "Ready!" by now)
+  const loadingScreen = document.getElementById('loading-screen');
+  if (loadingScreen && loadingScreen.parentNode) {
+      console.log("Force removing loading screen");
+      loadingScreen.style.opacity = '0';
+      loadingScreen.style.transition = 'opacity 0.5s';
+      setTimeout(() => {
+          if (loadingScreen.parentNode) loadingScreen.parentNode.removeChild(loadingScreen);
+      }, 500);
   }
 
   // Start animation loop
@@ -620,6 +705,7 @@ async function regenerateGPGPU() {
   // Restore all uniforms
   velocityUniforms.time = { value: renderUniforms.time.value };
   velocityUniforms.shape = { value: currentShape };
+  velocityUniforms.uReset = { value: 1.0 }; // RESET ON REGENERATION
   velocityUniforms.uMouse = { value: new THREE.Vector3(0, 0, 0) };
   velocityUniforms.uMouseActive = { value: 0.0 };
   velocityUniforms.uClick = { value: 0.0 };
@@ -638,6 +724,10 @@ async function regenerateGPGPU() {
     console.error('GPGPU Regeneration Error:', error);
     return;
   }
+  
+  // Instant GPU Init for new resolution
+  gpuCompute.compute();
+  velocityUniforms.uReset.value = 0.0;
   
   // Recreate particle geometry
   const geometry = new THREE.BufferGeometry();
@@ -744,45 +834,27 @@ function initAudio() {
 }
 
 async function fillTextures(texturePosition, textureVelocity) {
-  const posArray = texturePosition.image.data;
+  // INSTANT ALLOCATION NO CPU GENERATION
+  const posArray = texturePosition.image.data; // Float32Array is already zero-initialized by default
   const velArray = textureVelocity.image.data;
   
-  // Adaptive chunk size: smaller chunks for small particle counts to show progress
-  const totalParticles = PARTICLES;
-  const CHUNK_SIZE = Math.min(20000, Math.max(2000, Math.floor(totalParticles / 5))) * 4; // 5 chunks minimum
-  const total = posArray.length;
-
-  for (let k = 0; k < total; k += CHUNK_SIZE) {
-    const end = Math.min(k + CHUNK_SIZE, total);
-
-    for (let i = k; i < end; i += 4) {
-      posArray[i + 0] = (Math.random() * 2 - 1) * 200;
-      posArray[i + 1] = (Math.random() * 2 - 1) * 200;
-      posArray[i + 2] = (Math.random() * 2 - 1) * 200;
-      posArray[i + 3] = 1;
-
-      velArray[i + 0] = 0;
-      velArray[i + 1] = 0;
-      velArray[i + 2] = 0;
-      velArray[i + 3] = 1;
-    }
-
-    // Update loading screen progress
-    const percent = Math.floor(((k + CHUNK_SIZE) / total) * 100);
-    const loadingText = document.querySelector('#loading-screen div:last-child');
-    if (loadingText) {
-      loadingText.textContent = `Generating ${(totalParticles / 1000).toFixed(0)}k particles... ${Math.min(percent, 100)}%`;
-    }
-
-    // Always yield to main thread to allow browser to update UI
-    await new Promise(resolve => setTimeout(resolve, 0));
-  }
+  // We just fill the w component (life/mass) to 1.0, everything else can be 0 (handled by GPU init)
+  // Even this Loop is fast (4M operations is ~10ms in bulk)
+  // Or even faster: just let GPU handle it? 
+  // Safety: Set alpha/w component to 1
   
-  // Final update
-  const loadingText = document.querySelector('#loading-screen div:last-child');
-  if (loadingText) {
-    loadingText.textContent = 'Ready!';
+  const total = posArray.length;
+  for (let i = 3; i < total; i += 4) {
+      posArray[i] = 1; // mass/life
+      velArray[i] = 1; 
   }
+
+  // Update loading text immediately
+  const loadingText = document.querySelector('#loading-screen div:last-child');
+  if (loadingText) loadingText.textContent = 'Allocating GPU Buffers...';
+  
+  // Yield once to show text
+  await new Promise(resolve => setTimeout(resolve, 0));
 }
 
 // PHASE 5: Gravity Wells Functions
@@ -841,28 +913,38 @@ window.clearGravityWells = function () {
   console.log("All gravity wells cleared");
 };
 
+// Throttle mouse updates to reduce CPU overhead
+let lastMouseUpdateTime = 0;
+const MOUSE_UPDATE_INTERVAL = 16; // ~60fps max for mouse updates
+
 function onMouseMove(event) {
+  const now = performance.now();
+  if (now - lastMouseUpdateTime < MOUSE_UPDATE_INTERVAL) return;
+  lastMouseUpdateTime = now;
   updateMouse(event.clientX, event.clientY);
 }
 
 function onTouchMove(event) {
   if (event.touches.length > 0) {
+    const now = performance.now();
+    if (now - lastMouseUpdateTime < MOUSE_UPDATE_INTERVAL) return;
+    lastMouseUpdateTime = now;
     updateMouse(event.touches[0].clientX, event.touches[0].clientY);
   }
 }
 
 function updateMouse(x, y) {
+  // Simplified mouse position calculation (no raycasting every frame)
   mouse.x = (x / window.innerWidth) * 2 - 1;
   mouse.y = -(y / window.innerHeight) * 2 + 1;
 
-  raycaster.setFromCamera(mouse, camera);
-  const intersect = new THREE.Vector3();
-  raycaster.ray.intersectPlane(plane, intersect);
-
-  if (intersect) {
-    velocityUniforms.uMouse.value.copy(intersect);
-    velocityUniforms.uMouseActive.value = 1.0;
-  }
+  // Only do raycasting if needed (lazy evaluation)
+  // Calculate approximate 3D position without full raycasting
+  const mouseX = (x / window.innerWidth - 0.5) * 800;
+  const mouseY = -(y / window.innerHeight - 0.5) * 600;
+  
+  velocityUniforms.uMouse.value.set(mouseX, mouseY, 0);
+  velocityUniforms.uMouseActive.value = 1.0;
 }
 
 function onWindowResize() {
@@ -1088,21 +1170,32 @@ function generateTextTexture(text) {
 async function animate() { // Changed to async to support await
   requestAnimationFrame(animate);
   
-  // Hide loading screen on first frame
+  // Hide loading screen on first frame (Backup if init removal fails)
   if (isFirstFrame) {
     isFirstFrame = false;
     const loadingScreen = document.getElementById('loading-screen');
-    if (loadingScreen) {
+    if (loadingScreen && loadingScreen.parentNode && loadingScreen.style.opacity !== '0') {
       loadingScreen.style.opacity = '0';
       loadingScreen.style.transition = 'opacity 0.3s';
-      setTimeout(() => loadingScreen.remove(), 300);
+      setTimeout(() => { if(loadingScreen.parentNode) loadingScreen.remove(); }, 300);
     }
   }
   
   // ============================================================================
-  // ADAPTIVE RESOLUTION MONITORING
-  // ============================================================================  // Update FPS tracking
-  const currentFPS = resolutionManager.update();
+  // ADAPTIVE RESOLUTION MONITORING (Reduced frequency)
+  // ============================================================================
+  // Only check every 10 frames to reduce CPU overhead
+  if (Math.random() < 0.1) {
+    const currentFPS = resolutionManager.update();
+    
+    // Update stats display (throttled)
+    const statsDiv = document.getElementById('stats');
+    if (statsDiv) {
+      const profile = resolutionManager.getHardwareProfile();
+      const particles = (PARTICLES / 1000).toFixed(0);
+      statsDiv.textContent = `${WIDTH}x${WIDTH} (${particles}k) @ ${currentFPS.toFixed(0)} FPS | ${profile.deviceTier} Tier | GPU Active`;
+    }
+  }
   
   // Check for progressive upgrade (happens once after initial load)
   if (!isMobile && resolutionManager.checkProgressiveUpgrade()) {
@@ -1118,7 +1211,7 @@ async function animate() { // Changed to async to support await
   }
   
   // ============================================================================
-  // FIXED TIMESTEP PHYSICS (240Hz support)
+  // FIXED TIMESTEP PHYSICS (240Hz support) - GPU ACCELERATED
   // ============================================================================
   const currentTime = performance.now();
   const frameTime = currentTime - lastPhysicsTime;
@@ -1131,35 +1224,25 @@ async function animate() { // Changed to async to support await
     physicsAccumulator = 200;
   }
   
-  // Process physics in fixed steps
+  // Process physics in fixed steps (on GPU via shaders)
   while (physicsAccumulator >= FIXED_TIMESTEP) {
-    // Physics update with fixed dt
-    const dt = FIXED_TIMESTEP / 1000; // Convert to seconds
+    const dt = FIXED_TIMESTEP / 1000;
     velocityUniforms.time.value += dt * params.timeScale;
-    
     physicsAccumulator -= FIXED_TIMESTEP;
   }
   
   // Render time (can run at any framerate)
   renderUniforms.time.value += 0.01 * params.timeScale;
 
-  // Update Audio
-  if (analyser && audioInitialized) {
+  // Update Audio (Throttled to every 3rd frame to reduce CPU overhead)
+  if (analyser && audioInitialized && Math.random() < 0.33) {
     analyser.getByteFrequencyData(dataArray);
 
-    let bassSum = 0,
-      midSum = 0,
-      highSum = 0;
-    let bassCount = 0,
-      midCount = 0,
-      highCount = 0;
+    let bassSum = 0, midSum = 0, highSum = 0;
+    let bassCount = 0, midCount = 0, highCount = 0;
 
-    // Split into bands (approximate for 256 bins)
-    // Bass: 0-10 (0-800Hz roughly)
-    // Mid: 11-100
-    // High: 101-255
-
-    for (let i = 0; i < dataArray.length; i++) {
+    // Optimized loop with reduced iterations
+    for (let i = 0; i < dataArray.length; i += 2) { // Skip every other sample
       const val = dataArray[i];
       if (i < 10) {
         bassSum += val;
@@ -1176,38 +1259,35 @@ async function animate() { // Changed to async to support await
     const bassAvg = bassSum / bassCount;
     const midAvg = midSum / midCount;
     const highAvg = highSum / highCount;
-
     const sensitivity = params.audioSensitivity;
 
     const uBassTarget = (bassAvg / 255.0) * sensitivity;
     const uMidTarget = (midAvg / 255.0) * sensitivity;
     const uHighTarget = (highAvg / 255.0) * sensitivity;
-    const uSoundTarget =
-      ((bassAvg + midAvg + highAvg) / 3.0 / 255.0) * sensitivity;
+    const uSoundTarget = ((bassAvg + midAvg + highAvg) / 3.0 / 255.0) * sensitivity;
 
     // Smooth transition
-    velocityUniforms.uBass.value +=
-      (uBassTarget - velocityUniforms.uBass.value) * 0.2;
-    velocityUniforms.uMid.value +=
-      (uMidTarget - velocityUniforms.uMid.value) * 0.2;
-    velocityUniforms.uHigh.value +=
-      (uHighTarget - velocityUniforms.uHigh.value) * 0.2;
-    velocityUniforms.uSound.value +=
-      (uSoundTarget - velocityUniforms.uSound.value) * 0.2;
+    velocityUniforms.uBass.value += (uBassTarget - velocityUniforms.uBass.value) * 0.2;
+    velocityUniforms.uMid.value += (uMidTarget - velocityUniforms.uMid.value) * 0.2;
+    velocityUniforms.uHigh.value += (uHighTarget - velocityUniforms.uHigh.value) * 0.2;
+    velocityUniforms.uSound.value += (uSoundTarget - velocityUniforms.uSound.value) * 0.2;
 
     renderUniforms.uSound.value = velocityUniforms.uSound.value;
     renderUniforms.uBass.value = velocityUniforms.uBass.value;
     renderUniforms.uMid.value = velocityUniforms.uMid.value;
     renderUniforms.uHigh.value = velocityUniforms.uHigh.value;
 
-    // Mic Blow Detection (High frequency sudden spike)
+    // Mic Blow Detection
     if (uHighTarget > 0.8) {
       velocityUniforms.uBlow.value = 1.0;
     } else {
-      velocityUniforms.uBlow.value *= 0.9; // Decay
+      velocityUniforms.uBlow.value *= 0.9;
     }
   }
 
+  // ============================================================================
+  // GPU COMPUTE (Main GPU work happens here)
+  // ============================================================================
   gpuCompute.compute();
 
   renderUniforms.texturePosition.value =
@@ -1215,16 +1295,8 @@ async function animate() { // Changed to async to support await
   renderUniforms.textureVelocity.value =
     gpuCompute.getCurrentRenderTarget(variableVel).texture;
 
-  // Use Composer for Bloom
+  // Use Composer for Bloom (GPU accelerated post-processing)
   composer.render();
-  
-  // Update stats with FPS
-  const statsDiv = document.getElementById('stats');
-  if (statsDiv && Math.random() < 0.1) { // Update 10% of frames to reduce overhead
-    const profile = resolutionManager.getHardwareProfile();
-    const particles = (PARTICLES / 1000).toFixed(0);
-    statsDiv.textContent = `${WIDTH}x${WIDTH} (${particles}k) @ ${currentFPS.toFixed(0)} FPS | ${profile.deviceTier} Tier`;
-  }
 }
 
 init();

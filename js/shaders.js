@@ -1,6 +1,7 @@
 export const velocityFragmentShader = `
     uniform float time;
     uniform int shape;
+    uniform float uReset; // 1.0 = generate from hash, 0.0 = physics
     uniform vec3 uMouse;
     uniform float uMouseActive;
     uniform float uClick; // 0.0 = none, 1.0 = attract (black hole)
@@ -108,6 +109,13 @@ export const velocityFragmentShader = `
         
         vec3 target = vec3(0.0);
         vec3 rnd = hash3(uv);
+
+        if (uReset > 0.5) {
+            // Instant random positions
+            vec3 p = (rnd - 0.5) * 400.0;
+            gl_FragColor = vec4(p, 1.0);
+            return;
+        }
         
         // --- SHAPE DEFINITIONS ---
         if (shape == 22) { // HUMAN FACE (SDF Approximation)
@@ -2262,8 +2270,26 @@ export const velocityFragmentShader = `
 `;
 
 export const positionFragmentShader = `
+    uniform float uReset; // 1.0 = reset
+    
+    // Hash function needed for position reset
+    vec3 hash3(vec2 p) {
+        vec3 q = vec3( dot(p,vec2(127.1,311.7)), 
+                       dot(p,vec2(269.5,183.3)), 
+                       dot(p,vec2(419.2,371.9)) );
+        return fract(sin(q)*43758.5453);
+    }
+
     void main() {
         vec2 uv = gl_FragCoord.xy / resolution.xy;
+        
+        if (uReset > 0.5) {
+            vec3 rnd = hash3(uv);
+            vec3 p = (rnd - 0.5) * 400.0;
+            gl_FragColor = vec4(p, 1.0);
+            return;
+        }
+
         vec4 posData = texture2D( texturePosition, uv );
         vec4 velData = texture2D( textureVelocity, uv );
         vec3 pos = posData.xyz;
