@@ -68,43 +68,52 @@ class ResolutionManager {
       deviceTier: 'Medium'
     };
     
-    // Detect GPU via WebGL (with fallback for deprecated extension)
+    // Detect GPU via WebGL (avoid deprecated extension in Firefox)
     try {
       const canvas = document.createElement('canvas');
       const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
       
       if (gl) {
-        // Try to get debug info, but handle deprecation gracefully
-        const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
-        if (debugInfo) {
-          try {
-            profile.gpuVendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) || 'Unknown';
-            profile.gpuRenderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) || 'Unknown';
-          } catch (e) {
-            // Extension exists but deprecated - use RENDERER as fallback
+        // Detect Firefox to avoid deprecation warning
+        const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
+        
+        if (!isFirefox) {
+          // Use debug extension only in non-Firefox browsers
+          const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+          if (debugInfo) {
+            try {
+              profile.gpuVendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) || 'Unknown';
+              profile.gpuRenderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) || 'Unknown';
+            } catch (e) {
+              // Fallback to standard parameters
+              profile.gpuRenderer = gl.getParameter(gl.RENDERER) || 'Unknown';
+              profile.gpuVendor = gl.getParameter(gl.VENDOR) || 'Unknown';
+            }
+          } else {
+            // Extension not available - use standard WebGL parameters
             profile.gpuRenderer = gl.getParameter(gl.RENDERER) || 'Unknown';
             profile.gpuVendor = gl.getParameter(gl.VENDOR) || 'Unknown';
           }
-          
-          // Estimate GPU memory from renderer string
-          const renderer = profile.gpuRenderer.toLowerCase();
-          if (renderer.includes('rtx 4090') || renderer.includes('rtx 4080')) {
-            profile.gpuMemoryGB = 16;
-          } else if (renderer.includes('rtx 3090') || renderer.includes('rtx 3080')) {
-            profile.gpuMemoryGB = 12;
-          } else if (renderer.includes('rtx 3070') || renderer.includes('rtx 2080') || renderer.includes('rx 6800')) {
-            profile.gpuMemoryGB = 8;
-          } else if (renderer.includes('rtx 3060') || renderer.includes('rtx 2070') || renderer.includes('rx 6700')) {
-            profile.gpuMemoryGB = 6;
-          } else if (renderer.includes('gtx 1660') || renderer.includes('rtx 2060') || renderer.includes('rx 6600')) {
-            profile.gpuMemoryGB = 4;
-          } else if (renderer.includes('intel') && renderer.includes('iris')) {
-            profile.gpuMemoryGB = 2; // Integrated graphics
-          }
         } else {
-          // Extension not available - use standard WebGL parameters
+          // Firefox: Use standard WebGL parameters to avoid deprecation warning
           profile.gpuRenderer = gl.getParameter(gl.RENDERER) || 'Unknown';
           profile.gpuVendor = gl.getParameter(gl.VENDOR) || 'Unknown';
+        }
+        
+        // Estimate GPU memory from renderer string
+        const renderer = profile.gpuRenderer.toLowerCase();
+        if (renderer.includes('rtx 4090') || renderer.includes('rtx 4080')) {
+          profile.gpuMemoryGB = 16;
+        } else if (renderer.includes('rtx 3090') || renderer.includes('rtx 3080')) {
+          profile.gpuMemoryGB = 12;
+        } else if (renderer.includes('rtx 3070') || renderer.includes('rtx 2080') || renderer.includes('rx 6800')) {
+          profile.gpuMemoryGB = 8;
+        } else if (renderer.includes('rtx 3060') || renderer.includes('rtx 2070') || renderer.includes('rx 6700')) {
+          profile.gpuMemoryGB = 6;
+        } else if (renderer.includes('gtx 1660') || renderer.includes('rtx 2060') || renderer.includes('rx 6600')) {
+          profile.gpuMemoryGB = 4;
+        } else if (renderer.includes('intel') && renderer.includes('iris')) {
+          profile.gpuMemoryGB = 2; // Integrated graphics
         }
       }
     } catch (e) {
@@ -532,6 +541,9 @@ async function init() {
     }
   }, 1000);
 
+  // Restore user preferences after uniforms are initialized
+  restoreUserPreferences();
+
   animate();
 }
 
@@ -818,8 +830,14 @@ function onWindowResize() {
 window.setShape = function (id) {
   console.log("Setting shape to:", id);
   currentShape = id;
-  velocityUniforms.shape.value = id;
-  renderUniforms.shape.value = id; // Update render uniform
+  
+  // Check if uniforms are initialized
+  if (velocityUniforms && velocityUniforms.shape) {
+    velocityUniforms.shape.value = id;
+  }
+  if (renderUniforms && renderUniforms.shape) {
+    renderUniforms.shape.value = id; // Update render uniform
+  }
   
   // Save to localStorage
   localStorage.setItem('last_shape', id.toString());
@@ -882,7 +900,10 @@ window.toggleSettings = function () {
 };
 
 window.setTheme = function (themeId) {
-  renderUniforms.colorTheme.value = themeId;
+  // Check if uniforms are initialized
+  if (renderUniforms && renderUniforms.colorTheme) {
+    renderUniforms.colorTheme.value = themeId;
+  }
   
   // Save to localStorage
   localStorage.setItem('last_theme', themeId.toString());
@@ -898,7 +919,7 @@ function restoreUserPreferences() {
   if (lastShape !== null) {
     const shapeId = parseInt(lastShape);
     if (!isNaN(shapeId)) {
-      setTimeout(() => window.setShape(shapeId), 100);
+      window.setShape(shapeId);
       console.log(`🔄 Restored last shape: ${shapeId}`);
     }
   }
@@ -908,14 +929,13 @@ function restoreUserPreferences() {
   if (lastTheme !== null) {
     const themeId = parseInt(lastTheme);
     if (!isNaN(themeId)) {
-      setTimeout(() => window.setTheme(themeId), 100);
+      window.setTheme(themeId);
       console.log(`🔄 Restored last theme: ${themeId}`);
     }
   }
 }
 
-// Call on page load
-window.addEventListener('DOMContentLoaded', restoreUserPreferences);
+// Note: restoreUserPreferences() is now called at the end of init() after uniforms are ready
 
 // ============================================================================
 // SLIDER UPDATE FUNCTIONS
