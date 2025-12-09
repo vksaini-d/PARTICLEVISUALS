@@ -258,20 +258,58 @@ class ResolutionManager {
     }
     return false;
   }
+  
+  // Progressive loading: Start low, upgrade to target
+  startProgressiveUpgrade(targetTierIndex) {
+    this.targetTierIndex = targetTierIndex;
+    this.upgradeScheduled = true;
+    this.upgradeFrameCounter = 0;
+    this.upgradeFrameDelay = 60; // Wait 60 frames (~1 second at 60fps) between upgrades
+    console.log(`📈 Progressive upgrade scheduled: ${this.tiers[0]}x${this.tiers[0]} → ${this.tiers[targetTierIndex]}x${this.tiers[targetTierIndex]}`);
+  }
+  
+  checkProgressiveUpgrade() {
+    if (this.upgradeScheduled && this.currentTierIndex < this.targetTierIndex) {
+      this.upgradeFrameCounter++;
+      
+      // Only upgrade after delay
+      if (this.upgradeFrameCounter >= this.upgradeFrameDelay) {
+        this.upgradeFrameCounter = 0; // Reset for next upgrade
+        this.currentTierIndex++;
+        this.needsRegeneration = true;
+        
+        if (this.currentTierIndex >= this.targetTierIndex) {
+          this.upgradeScheduled = false;
+          console.log(`✅ Progressive upgrade complete: ${this.getCurrentResolution()}x${this.getCurrentResolution()}`);
+        } else {
+          console.log(`⏫ Upgrading to ${this.getCurrentResolution()}x${this.getCurrentResolution()}...`);
+        }
+        return true;
+      }
+    }
+    return false;
+  }
 }
 
 // --- Configuration ---
 // Mobile Detection: Ensure 60 FPS on all devices
 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
-// Adaptive initial resolution based on device
-// Mobile: 200x200 (40k particles) for smooth 60 FPS
-// Desktop: Uses ResolutionManager (starts at 512x512, adapts up to 1024x1024)
+// PROGRESSIVE LOADING STRATEGY:
+// Always start with minimal particles (128x128 = 16k) for instant display
+// Then progressively upgrade to device-optimal resolution
 const resolutionManager = new ResolutionManager();
-let WIDTH = isMobile ? 200 : resolutionManager.getCurrentResolution();
+const targetTierIndex = resolutionManager.currentTierIndex; // Save target tier
+resolutionManager.currentTierIndex = 0; // Force start at lowest tier (128x128)
+
+let WIDTH = isMobile ? 200 : 128; // Mobile: 200x200, Desktop: 128x128 for fast initial load
 let PARTICLES = WIDTH * WIDTH;
 
 console.log(`🎮 Device: ${isMobile ? 'Mobile' : 'Desktop'} | Initial particles: ${PARTICLES.toLocaleString()}`);
+if (!isMobile) {
+  const targetRes = resolutionManager.tiers[targetTierIndex];
+  console.log(`📈 Will upgrade to: ${targetRes}x${targetRes} (${(targetRes * targetRes).toLocaleString()} particles)`);
+}
 
 // --- State ---
 let renderer, scene, camera;
@@ -543,6 +581,11 @@ async function init() {
 
   // Restore user preferences after uniforms are initialized
   restoreUserPreferences();
+  
+  // Start progressive upgrade for desktop (mobile stays at 200x200)
+  if (!isMobile && targetTierIndex > 0) {
+    resolutionManager.startProgressiveUpgrade(targetTierIndex);
+  }
 
   animate();
 }
@@ -634,7 +677,17 @@ function updateStatsDisplay() {
   if (statsDiv) {
     const profile = resolutionManager.getHardwareProfile();
     const particles = (PARTICLES / 1000).toFixed(0);
-    statsDiv.textContent = `${WIDTH}x${WIDTH} (${particles}k) | Target: ${profile.targetFPS} FPS | ${profile.deviceTier} Tier`;
+    
+    // Show upgrade status if in progress
+    let statusText = `${WIDTH}x${WIDTH} (${particles}k) | Target: ${profile.targetFPS} FPS | ${profile.deviceTier} Tier`;
+    
+    if (resolutionManager.upgradeScheduled) {
+      const targetRes = resolutionManager.tiers[resolutionManager.targetTierIndex];
+      const targetParticles = (targetRes * targetRes / 1000).toFixed(0);
+      statusText += ` | ⏫ Upgrading to ${targetParticles}k...`;
+    }
+    
+    statsDiv.textContent = statusText;
   }
 }
 
@@ -1039,19 +1092,25 @@ function generateTextTexture(text) {
   velocityUniforms.textTexture.value = texture;
 }
 
-function animate() {
+async function animate() { // Changed to async to support await
   requestAnimationFrame(animate);
   
   // ============================================================================
   // ADAPTIVE RESOLUTION MONITORING
-  // ============================================================================
+  // ============================================================================  // Update FPS tracking
   const currentFPS = resolutionManager.update();
   
-  // Check if resolution needs to change
-  if (resolutionManager.checkAndReset()) {
+  // Check for progressive upgrade (happens once after initial load)
+  if (!isMobile && resolutionManager.checkProgressiveUpgrade()) {
     WIDTH = resolutionManager.getCurrentResolution();
     PARTICLES = WIDTH * WIDTH;
-    regenerateGPGPU();
+    await regenerateGPGPU();
+  }
+  // Check if resolution needs to change (adaptive performance)
+  else if (resolutionManager.checkAndReset()) {
+    WIDTH = resolutionManager.getCurrentResolution();
+    PARTICLES = WIDTH * WIDTH;
+    await regenerateGPGPU();
   }
   
   // ============================================================================
