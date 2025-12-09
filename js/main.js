@@ -569,16 +569,6 @@ async function init() {
       gui.controllers.find((c) => c.property === "timeScale").updateDisplay();
   });
   
-  // Hide loading screen
-  setTimeout(() => {
-    const loadingScreen = document.getElementById('loading-screen');
-    if (loadingScreen) {
-      loadingScreen.style.opacity = '0';
-      loadingScreen.style.transition = 'opacity 0.5s';
-      setTimeout(() => loadingScreen.remove(), 500);
-    }
-  }, 1000);
-
   // Restore user preferences after uniforms are initialized
   restoreUserPreferences();
   
@@ -587,7 +577,19 @@ async function init() {
     resolutionManager.startProgressiveUpgrade(targetTierIndex);
   }
 
+  // Start animation loop
   animate();
+  
+  // Hide loading screen immediately after first frame renders
+  // This shows the initial 16k particles instantly, then upgrades happen in background
+  requestAnimationFrame(() => {
+    const loadingScreen = document.getElementById('loading-screen');
+    if (loadingScreen) {
+      loadingScreen.style.opacity = '0';
+      loadingScreen.style.transition = 'opacity 0.3s';
+      setTimeout(() => loadingScreen.remove(), 300);
+    }
+  });
 }
 
 // ============================================================================
@@ -782,16 +784,16 @@ async function fillTextures(texturePosition, textureVelocity) {
       loadingText.textContent = `Generating ${(totalParticles / 1000).toFixed(0)}k particles... ${Math.min(percent, 100)}%`;
     }
 
-    // Yield to main thread (prevents browser freeze)
-    // Longer delay for small particle counts to make progress visible
-    const delay = totalParticles < 50000 ? 50 : 0;
-    await new Promise(resolve => setTimeout(resolve, delay));
+    // Yield to main thread only for large particle counts (prevents browser freeze)
+    if (totalParticles > 100000) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
   }
   
   // Final update
   const loadingText = document.querySelector('#loading-screen div:last-child');
   if (loadingText) {
-    loadingText.textContent = 'Initializing physics engine...';
+    loadingText.textContent = 'Ready!';
   }
 }
 
