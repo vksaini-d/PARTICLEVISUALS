@@ -755,8 +755,9 @@ async function fillTextures(texturePosition, textureVelocity) {
   const posArray = texturePosition.image.data;
   const velArray = textureVelocity.image.data;
   
-  // Process 20k particles per chunk (balance between speed and responsiveness)
-  const CHUNK_SIZE = 20000 * 4; // 20k particles × 4 RGBA channels
+  // Adaptive chunk size: smaller chunks for small particle counts to show progress
+  const totalParticles = PARTICLES;
+  const CHUNK_SIZE = Math.min(20000, Math.max(2000, Math.floor(totalParticles / 5))) * 4; // 5 chunks minimum
   const total = posArray.length;
 
   for (let k = 0; k < total; k += CHUNK_SIZE) {
@@ -775,20 +776,22 @@ async function fillTextures(texturePosition, textureVelocity) {
     }
 
     // Update loading screen progress
-    const percent = Math.floor((k / total) * 100);
+    const percent = Math.floor(((k + CHUNK_SIZE) / total) * 100);
     const loadingText = document.querySelector('#loading-screen div:last-child');
     if (loadingText) {
-      loadingText.textContent = `Generating universe... ${percent}%`;
+      loadingText.textContent = `Generating ${(totalParticles / 1000).toFixed(0)}k particles... ${Math.min(percent, 100)}%`;
     }
 
     // Yield to main thread (prevents browser freeze)
-    await new Promise(resolve => setTimeout(resolve, 0));
+    // Longer delay for small particle counts to make progress visible
+    const delay = totalParticles < 50000 ? 50 : 0;
+    await new Promise(resolve => setTimeout(resolve, delay));
   }
   
   // Final update
   const loadingText = document.querySelector('#loading-screen div:last-child');
   if (loadingText) {
-    loadingText.textContent = 'Finalizing...';
+    loadingText.textContent = 'Initializing physics engine...';
   }
 }
 
