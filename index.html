@@ -2,17 +2,100 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Interactive 3D Particle Visualization - Explore stunning cosmic phenomena, geometric shapes, and celestial objects rendered with 360k particles using WebGL and GPGPU physics.">
-    <title>Particle Visuals - Interactive 3D Cosmic Visualization</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
     
+    <!-- Primary Meta Tags -->
+    <title>ParticleVisuals - Simulation | Interactive WebGL Particle Physics</title>
+    <meta name="title" content="ParticleVisuals - Simulation | Interactive WebGL Particle Physics">
+    <meta name="description" content="Real-time 360k particle physics simulation powered by WebGL GPGPU computing. Explore cosmic phenomena, black holes, galaxies, DNA helixes, and geometric shapes with adaptive performance tuning.">
+    <meta name="keywords" content="WebGL, GPGPU, particle physics, Three.js, interactive visualization, cosmic simulation, black hole, galaxy, nebula, real-time graphics, shader programming, GPU computing, particle system, 3D visualization">
+    <meta name="author" content="ParticleVisuals">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#000000">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://particlevisuals.vercel.app/">
+    <meta property="og:title" content="ParticleVisuals - Simulation | Interactive WebGL Particle Physics">
+    <meta property="og:description" content="Real-time 360k particle physics simulation with adaptive performance. Explore cosmic phenomena and geometric shapes.">
+    <meta property="og:image" content="https://particlevisuals.vercel.app/og-image.png">
+    
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://particlevisuals.vercel.app/">
+    <meta property="twitter:title" content="ParticleVisuals - Simulation | Interactive WebGL Particle Physics">
+    <meta property="twitter:description" content="Real-time 360k particle physics simulation with adaptive performance. Explore cosmic phenomena and geometric shapes.">
+    <meta property="twitter:image" content="https://particlevisuals.vercel.app/og-image.png">
+    
+    <!-- Favicons -->
     <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
     <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
     <link rel="manifest" href="manifest.json">
     
-    <link rel="stylesheet" href="css/style.css">
+    <!-- Preconnect to external resources -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="preconnect" href="https://api.countapi.xyz" crossorigin>
+    
+    <!-- Critical CSS (inline for performance) -->
+    <style>
+        body { margin: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; background: #000; }
+        canvas { display: block; }
+        #loading-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; display: flex; align-items: center; justify-content: center; z-index: 9999; color: #fff; font-size: 1.2rem; }
+        #visitor-counter { position: absolute; bottom: 20px; left: 20px; color: rgba(255,255,255,0.5); font-size: 0.75rem; pointer-events: none; z-index: 100; }
+    </style>
+    
+    <!-- Deferred CSS -->
+    <link rel="stylesheet" href="css/style.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="css/style.css"></noscript>
+    
+    <!-- JSON-LD Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "ParticleVisuals - Simulation",
+      "description": "Browser-based real-time particle physics visualization tool powered by WebGL and GPU computing. Features 360,000 particles with adaptive performance optimization.",
+      "url": "https://particlevisuals.vercel.app",
+      "applicationCategory": "MultimediaApplication",
+      "operatingSystem": "Any (Browser-based)",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "browserRequirements": "Requires WebGL 2.0 support",
+      "softwareVersion": "2.0",
+      "author": {
+        "@type": "Organization",
+        "name": "ParticleVisuals"
+      },
+      "featureList": [
+        "Real-time GPGPU particle physics",
+        "360,000 particle simulation",
+        "Adaptive performance tuning",
+        "37+ cosmic and geometric shapes",
+        "Audio-reactive visualization",
+        "Multi-touch interaction",
+        "32+ color themes"
+      ]
+    }
+    </script>
 </head>
 <body>
+
+<!-- Loading Screen -->
+<div id="loading-screen">
+    <div style="text-align: center;">
+        <div style="font-size: 2rem; margin-bottom: 1rem;">⚛️</div>
+        <div>Initializing GPGPU Physics Engine...</div>
+        <div style="font-size: 0.8rem; margin-top: 0.5rem; opacity: 0.6;">Optimizing for your GPU</div>
+    </div>
+</div>
+
+<!-- Visitor Counter -->
+<div id="visitor-counter">
+    👁️ <span id="visitor-count">...</span> Observers
+</div>
 
 <!-- Controls Toggle Button -->
 <button id="controls-toggle" class="open" onclick="toggleControls()">
@@ -131,136 +214,212 @@
 
 <!-- Settings Panel -->
 <div id="settings-panel">
-    <div class="section-title">Classic</div>
-    <div class="color-option" onclick="setTheme(0)">
-        <div class="color-preview" style="background: linear-gradient(45deg, #ff00ff, #00ff00);"></div>
-        <span class="option-label">Neon</span>
-    </div>
-    <div class="color-option" onclick="setTheme(17)">
-        <div class="color-preview" style="background: linear-gradient(45deg, #000000, #000044, #ff00ff);"></div>
-        <span class="option-label">Deep Space (NASA)</span>
-    </div>
-    <div class="color-option" onclick="setTheme(15)">
-        <div class="color-preview" style="background: linear-gradient(45deg, #0000ff, #ffff00);"></div>
-        <span class="option-label">Kinetic (Speed)</span>
-    </div>
-    <div class="color-option" onclick="setTheme(16)">
-        <div class="color-preview" style="background: linear-gradient(45deg, #ffffff, #00ffff, #ff00ff);"></div>
-        <span class="option-label">Iridescence</span>
-    </div>
-    <div class="color-option" onclick="setTheme(1)">
-        <div class="color-preview" style="background: linear-gradient(45deg, #ff4400, #ffcc00);"></div>
-        <span class="option-label">Fire</span>
-    </div>
-    <div class="color-option" onclick="setTheme(2)">
-        <div class="color-preview" style="background: linear-gradient(45deg, #00ffff, #ffffff);"></div>
-        <span class="option-label">Ice</span>
-    </div>
-    <div class="color-option" onclick="setTheme(3)">
-        <div class="color-preview" style="background: linear-gradient(45deg, #00ff00, #ffff00);"></div>
-        <span class="option-label">Nature</span>
-    </div>
-    <div class="color-option" onclick="setTheme(4)">
-        <div class="color-preview" style="background: #00ff00;"></div>
-        <span class="option-label">Matrix</span>
+    <!-- Visuals Section -->
+    <div class="settings-section">
+        <div class="section-title">⚡ Visuals</div>
+        
+        <div class="slider-control">
+            <label for="bloom-strength">
+                <span class="slider-label">Bloom Strength</span>
+                <span class="slider-value" id="bloom-value">0.15</span>
+            </label>
+            <input type="range" id="bloom-strength" min="0" max="3" step="0.05" value="0.15" 
+                   oninput="updateBloom(this.value)">
+        </div>
+        
+        <div class="slider-control">
+            <label for="bloom-radius">
+                <span class="slider-label">Bloom Radius</span>
+                <span class="slider-value" id="radius-value">0.01</span>
+            </label>
+            <input type="range" id="bloom-radius" min="0" max="1" step="0.01" value="0.01" 
+                   oninput="updateBloomRadius(this.value)">
+        </div>
+        
+        <div class="slider-control">
+            <label for="bloom-threshold">
+                <span class="slider-label">Bloom Threshold</span>
+                <span class="slider-value" id="threshold-value">0.80</span>
+            </label>
+            <input type="range" id="bloom-threshold" min="0" max="1" step="0.05" value="0.80" 
+                   oninput="updateBloomThreshold(this.value)">
+        </div>
     </div>
     
-    <div class="section-title">Movies</div>
-    <div class="color-option" onclick="setTheme(5)">
-        <div class="color-preview" style="background: linear-gradient(45deg, #00ffff, #ff9900);"></div>
-        <span class="option-label">Tron</span>
+    <!-- Simulation Section -->
+    <div class="settings-section">
+        <div class="section-title">🌀 Simulation</div>
+        
+        <div class="slider-control">
+            <label for="rotation-speed">
+                <span class="slider-label">Rotation Speed</span>
+                <span class="slider-value" id="rotation-value">0.05</span>
+            </label>
+            <input type="range" id="rotation-speed" min="0" max="0.5" step="0.01" value="0.05" 
+                   oninput="updateRotation(this.value)">
+        </div>
+        
+        <div class="slider-control">
+            <label for="time-scale">
+                <span class="slider-label">Time Scale</span>
+                <span class="slider-value" id="time-value">1.00</span>
+            </label>
+            <input type="range" id="time-scale" min="-2" max="2" step="0.1" value="1" 
+                   oninput="updateTimeScale(this.value)">
+        </div>
     </div>
-    <div class="color-option" onclick="setTheme(11)">
-        <div class="color-preview" style="background: linear-gradient(45deg, #ff0000, #333333);"></div>
-        <span class="option-label">Tron: Ares</span>
+    
+    <!-- Audio Section -->
+    <div class="settings-section">
+        <div class="section-title">🎵 Audio</div>
+        
+        <div class="slider-control">
+            <label for="audio-sensitivity">
+                <span class="slider-label">Sensitivity</span>
+                <span class="slider-value" id="audio-value">1.00</span>
+            </label>
+            <input type="range" id="audio-sensitivity" min="0" max="5" step="0.1" value="1" 
+                   oninput="updateAudioSensitivity(this.value)">
+        </div>
     </div>
-    <div class="color-option" onclick="setTheme(6)">
-        <div class="color-preview" style="background: linear-gradient(45deg, #ff00cc, #ffb6c1);"></div>
-        <span class="option-label">Barbie</span>
-    </div>
-    <div class="color-option" onclick="setTheme(7)">
-        <div class="color-preview" style="background: linear-gradient(45deg, #ff9900, #00aaff);"></div>
-        <span class="option-label">Dune</span>
-    </div>
-    <div class="color-option" onclick="setTheme(8)">
-        <div class="color-preview" style="background: linear-gradient(45deg, #8800ff, #00ffff);"></div>
-        <span class="option-label">Blade Runner</span>
-    </div>
-    <div class="color-option" onclick="setTheme(9)">
-        <div class="color-preview" style="background: linear-gradient(45deg, #ff0000, #0000ff);"></div>
-        <span class="option-label">Star Wars</span>
-    </div>
-
-    <div class="section-title">TV Series</div>
-    <div class="color-option" onclick="setTheme(10)">
-        <div class="color-preview" style="background: linear-gradient(45deg, #00aaff, #ff4400);"></div>
-        <span class="option-label">Game of Thrones</span>
-    </div>
-    <div class="color-option" onclick="setTheme(13)">
-        <div class="color-preview" style="background: linear-gradient(45deg, #aa0000, #000000);"></div>
-        <span class="option-label">Stranger Things</span>
-    </div>
-    <div class="color-option" onclick="setTheme(12)">
-        <div class="color-preview" style="background: linear-gradient(45deg, #00ffff, #ffff00);"></div>
-        <span class="option-label">Breaking Bad</span>
-    </div>
-    <div class="color-option" onclick="setTheme(14)">
-        <div class="color-preview" style="background: linear-gradient(45deg, #ff0088, #00ff88);"></div>
-        <span class="option-label">Squid Game</span>
-    </div>
-    <div class="color-option" onclick="setTheme(19)">
-        <div class="color-preview" style="background: linear-gradient(45deg, #000044, #00ff88);"></div>
-        <span class="option-label">Biolum</span>
-    </div>
-    <div class="color-option" onclick="setTheme(20)">
-        <div class="color-preview" style="background: linear-gradient(45deg, #220044, #ff8800);"></div>
-        <span class="option-label">Synthwave</span>
-    </div>
-    <div class="color-option" onclick="setTheme(21)">
-        <div class="color-preview" style="background: linear-gradient(45deg, #ff00ff, #00ffff);"></div>
-        <span class="option-label">Glitch</span>
-    </div>
-    <div class="color-option" onclick="setTheme(22)">
-        <div class="color-preview" style="background: linear-gradient(45deg, #ffcc00, #ff8800);"></div>
-        <span class="option-label">Golden Hour</span>
-    </div>
-
-    <div class="section-title">Celestial (NEW)</div>
-    <div class="color-option" onclick="setTheme(23)">
-        <div class="color-preview" style="background: linear-gradient(45deg, #ff0044, #00ff88, #0088ff);"></div>
-        <span class="option-label">Orion Nebula</span>
-    </div>
-    <div class="color-option" onclick="setTheme(24)">
-        <div class="color-preview" style="background: linear-gradient(45deg, #ff4400, #ffcc00, #0088ff);"></div>
-        <span class="option-label">Crab Nebula</span>
-    </div>
-    <div class="color-option" onclick="setTheme(25)">
-        <div class="color-preview" style="background: linear-gradient(45deg, #ffee88, #4488ff);"></div>
-        <span class="option-label">Andromeda</span>
-    </div>
-    <div class="color-option" onclick="setTheme(26)">
-        <div class="color-preview" style="background: linear-gradient(45deg, #ffdd88, #ffffff);"></div>
-        <span class="option-label">Saturn</span>
-    </div>
-    <div class="color-option" onclick="setTheme(27)">
-        <div class="color-preview" style="background: linear-gradient(45deg, #000000, #880000);"></div>
-        <span class="option-label">Horsehead</span>
-    </div>
-    <div class="color-option" onclick="setTheme(28)">
-        <div class="color-preview" style="background: linear-gradient(45deg, #00ff88, #ff8800);"></div>
-        <span class="option-label">Helix Nebula</span>
-    </div>
-    <div class="color-option" onclick="setTheme(29)">
-        <div class="color-preview" style="background: linear-gradient(45deg, #4488ff, #ffee88, #ff8844);"></div>
-        <span class="option-label">Hubble Field</span>
-    </div>
-    <div class="color-option" onclick="setTheme(30)">
-        <div class="color-preview" style="background: linear-gradient(45deg, #ffffff, #ff4444);"></div>
-        <span class="option-label">SNR N49</span>
-    </div>
-    <div class="color-option" onclick="setTheme(31)">
-        <div class="color-preview" style="background: linear-gradient(45deg, #ff0022, #ff4466);"></div>
-        <span class="option-label">Rosette</span>
+    
+    <!-- Color Themes Section -->
+    <div class="settings-section">
+        <div class="section-title">🎨 Color Themes</div>
+        
+        <div class="theme-grid">
+            <!-- Classic -->
+            <div class="color-option" onclick="setTheme(0)" title="Neon">
+                <div class="color-preview" style="background: linear-gradient(45deg, #ff00ff, #00ff00);"></div>
+                <span class="option-label">Neon</span>
+            </div>
+            <div class="color-option" onclick="setTheme(17)" title="Deep Space">
+                <div class="color-preview" style="background: linear-gradient(45deg, #000000, #000044, #ff00ff);"></div>
+                <span class="option-label">Deep Space</span>
+            </div>
+            <div class="color-option" onclick="setTheme(15)" title="Kinetic">
+                <div class="color-preview" style="background: linear-gradient(45deg, #0000ff, #ffff00);"></div>
+                <span class="option-label">Kinetic</span>
+            </div>
+            <div class="color-option" onclick="setTheme(16)" title="Iridescence">
+                <div class="color-preview" style="background: linear-gradient(45deg, #ffffff, #00ffff, #ff00ff);"></div>
+                <span class="option-label">Iridescence</span>
+            </div>
+            <div class="color-option" onclick="setTheme(1)" title="Fire">
+                <div class="color-preview" style="background: linear-gradient(45deg, #ff4400, #ffcc00);"></div>
+                <span class="option-label">Fire</span>
+            </div>
+            <div class="color-option" onclick="setTheme(2)" title="Ice">
+                <div class="color-preview" style="background: linear-gradient(45deg, #00ffff, #ffffff);"></div>
+                <span class="option-label">Ice</span>
+            </div>
+            <div class="color-option" onclick="setTheme(3)" title="Nature">
+                <div class="color-preview" style="background: linear-gradient(45deg, #00ff00, #ffff00);"></div>
+                <span class="option-label">Nature</span>
+            </div>
+            <div class="color-option" onclick="setTheme(4)" title="Matrix">
+                <div class="color-preview" style="background: #00ff00;"></div>
+                <span class="option-label">Matrix</span>
+            </div>
+            
+            <!-- Movies -->
+            <div class="color-option" onclick="setTheme(5)" title="Tron">
+                <div class="color-preview" style="background: linear-gradient(45deg, #00ffff, #ff9900);"></div>
+                <span class="option-label">Tron</span>
+            </div>
+            <div class="color-option" onclick="setTheme(11)" title="Tron: Ares">
+                <div class="color-preview" style="background: linear-gradient(45deg, #ff0000, #333333);"></div>
+                <span class="option-label">Tron: Ares</span>
+            </div>
+            <div class="color-option" onclick="setTheme(6)" title="Barbie">
+                <div class="color-preview" style="background: linear-gradient(45deg, #ff00cc, #ffb6c1);"></div>
+                <span class="option-label">Barbie</span>
+            </div>
+            <div class="color-option" onclick="setTheme(7)" title="Dune">
+                <div class="color-preview" style="background: linear-gradient(45deg, #ff9900, #00aaff);"></div>
+                <span class="option-label">Dune</span>
+            </div>
+            <div class="color-option" onclick="setTheme(8)" title="Blade Runner">
+                <div class="color-preview" style="background: linear-gradient(45deg, #8800ff, #00ffff);"></div>
+                <span class="option-label">Blade Runner</span>
+            </div>
+            <div class="color-option" onclick="setTheme(9)" title="Star Wars">
+                <div class="color-preview" style="background: linear-gradient(45deg, #ff0000, #0000ff);"></div>
+                <span class="option-label">Star Wars</span>
+            </div>
+            
+            <!-- TV Series -->
+            <div class="color-option" onclick="setTheme(10)" title="Game of Thrones">
+                <div class="color-preview" style="background: linear-gradient(45deg, #00aaff, #ff4400);"></div>
+                <span class="option-label">GoT</span>
+            </div>
+            <div class="color-option" onclick="setTheme(13)" title="Stranger Things">
+                <div class="color-preview" style="background: linear-gradient(45deg, #aa0000, #000000);"></div>
+                <span class="option-label">Stranger</span>
+            </div>
+            <div class="color-option" onclick="setTheme(12)" title="Breaking Bad">
+                <div class="color-preview" style="background: linear-gradient(45deg, #00ffff, #ffff00);"></div>
+                <span class="option-label">Breaking Bad</span>
+            </div>
+            <div class="color-option" onclick="setTheme(14)" title="Squid Game">
+                <div class="color-preview" style="background: linear-gradient(45deg, #ff0088, #00ff88);"></div>
+                <span class="option-label">Squid Game</span>
+            </div>
+            <div class="color-option" onclick="setTheme(19)" title="Bioluminescence">
+                <div class="color-preview" style="background: linear-gradient(45deg, #000044, #00ff88);"></div>
+                <span class="option-label">Biolum</span>
+            </div>
+            <div class="color-option" onclick="setTheme(20)" title="Synthwave">
+                <div class="color-preview" style="background: linear-gradient(45deg, #220044, #ff8800);"></div>
+                <span class="option-label">Synthwave</span>
+            </div>
+            <div class="color-option" onclick="setTheme(21)" title="Glitch">
+                <div class="color-preview" style="background: linear-gradient(45deg, #ff00ff, #00ffff);"></div>
+                <span class="option-label">Glitch</span>
+            </div>
+            <div class="color-option" onclick="setTheme(22)" title="Golden Hour">
+                <div class="color-preview" style="background: linear-gradient(45deg, #ffcc00, #ff8800);"></div>
+                <span class="option-label">Golden</span>
+            </div>
+            
+            <!-- Celestial -->
+            <div class="color-option" onclick="setTheme(23)" title="Orion Nebula">
+                <div class="color-preview" style="background: linear-gradient(45deg, #ff0044, #00ff88, #0088ff);"></div>
+                <span class="option-label">Orion</span>
+            </div>
+            <div class="color-option" onclick="setTheme(24)" title="Crab Nebula">
+                <div class="color-preview" style="background: linear-gradient(45deg, #ff4400, #ffcc00, #0088ff);"></div>
+                <span class="option-label">Crab</span>
+            </div>
+            <div class="color-option" onclick="setTheme(25)" title="Andromeda">
+                <div class="color-preview" style="background: linear-gradient(45deg, #ffee88, #4488ff);"></div>
+                <span class="option-label">Andromeda</span>
+            </div>
+            <div class="color-option" onclick="setTheme(26)" title="Saturn">
+                <div class="color-preview" style="background: linear-gradient(45deg, #ffdd88, #ffffff);"></div>
+                <span class="option-label">Saturn</span>
+            </div>
+            <div class="color-option" onclick="setTheme(27)" title="Horsehead">
+                <div class="color-preview" style="background: linear-gradient(45deg, #000000, #880000);"></div>
+                <span class="option-label">Horsehead</span>
+            </div>
+            <div class="color-option" onclick="setTheme(28)" title="Helix Nebula">
+                <div class="color-preview" style="background: linear-gradient(45deg, #00ff88, #ff8800);"></div>
+                <span class="option-label">Helix</span>
+            </div>
+            <div class="color-option" onclick="setTheme(29)" title="Hubble Field">
+                <div class="color-preview" style="background: linear-gradient(45deg, #4488ff, #ffee88, #ff8844);"></div>
+                <span class="option-label">Hubble</span>
+            </div>
+            <div class="color-option" onclick="setTheme(30)" title="SNR N49">
+                <div class="color-preview" style="background: linear-gradient(45deg, #ffffff, #ff4444);"></div>
+                <span class="option-label">SNR N49</span>
+            </div>
+            <div class="color-option" onclick="setTheme(31)" title="Rosette">
+                <div class="color-preview" style="background: linear-gradient(45deg, #ff0022, #ff4466);"></div>
+                <span class="option-label">Rosette</span>
+            </div>
+        </div>
     </div>
 </div>
 
