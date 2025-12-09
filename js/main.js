@@ -11,15 +11,20 @@ import {
 } from "./shaders.js";
 
 // ============================================================================
-// ADAPTIVE PERFORMANCE SYSTEM - ResolutionManager
+// ADAPTIVE PERFORMANCE SYSTEM - Enhanced ResolutionManager
 // ============================================================================
 class ResolutionManager {
   constructor() {
     // Resolution tiers: 128x128 (16k), 256x256 (65k), 512x512 (262k), 600x600 (360k), 768x768 (589k), 1024x1024 (1M)
     this.tiers = [128, 256, 512, 600, 768, 1024];
-    this.currentTierIndex = 2; // Start at 512x512 (safe middle ground)
     
-    // Load saved GPU tier from localStorage
+    // Detect hardware capabilities
+    this.hardwareProfile = this.detectHardware();
+    
+    // Set initial tier based on hardware
+    this.currentTierIndex = this.hardwareProfile.recommendedTierIndex;
+    
+    // Load saved GPU tier from localStorage (override if user has proven better performance)
     const savedTier = localStorage.getItem('gpu_tier');
     if (savedTier !== null) {
       const savedIndex = this.tiers.indexOf(parseInt(savedTier));
@@ -33,21 +38,139 @@ class ResolutionManager {
     this.fpsHistory = [];
     this.maxHistoryLength = 120; // 2 seconds at 60fps
     this.lastFrameTime = performance.now();
-    this.stableHighFPSCount = 0; // Frames with FPS > 58
-    this.stableLowFPSCount = 0;  // Frames with FPS < 40
+    this.stableHighFPSCount = 0;
+    this.stableLowFPSCount = 0;
+    
+    // Dynamic FPS targets based on monitor refresh rate
+    this.TARGET_FPS_HIGH = this.hardwareProfile.targetFPS * 0.95; // 95% of max refresh
+    this.TARGET_FPS_LOW = Math.max(30, this.hardwareProfile.targetFPS * 0.5); // 50% of target, min 30
     
     // Tuning thresholds
     this.UPGRADE_THRESHOLD = 120; // 2 seconds of high FPS
     this.DOWNGRADE_THRESHOLD = 60; // 1 second of low FPS
-    this.TARGET_FPS_HIGH = 58;
-    this.TARGET_FPS_LOW = 40;
     
     this.isStable = false;
     this.needsRegeneration = false;
+    
+    // Log hardware profile
+    console.log(`🖥️ Hardware Profile:`, this.hardwareProfile);
+  }
+  
+  detectHardware() {
+    const profile = {
+      gpuVendor: 'Unknown',
+      gpuRenderer: 'Unknown',
+      gpuMemoryGB: 2, // Default estimate
+      cpuCores: navigator.hardwareConcurrency || 4,
+      refreshRate: 60, // Default
+      targetFPS: 60,
+      recommendedTierIndex: 2, // Default to 512x512
+      deviceTier: 'Medium'
+    };
+    
+    // Detect GPU via WebGL
+    try {
+      const canvas = document.createElement('canvas');
+      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+      
+      if (gl) {
+        const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+        if (debugInfo) {
+          profile.gpuVendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
+          profile.gpuRenderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+          
+          // Estimate GPU memory from renderer string
+          const renderer = profile.gpuRenderer.toLowerCase();
+          if (renderer.includes('rtx 4090') || renderer.includes('rtx 4080')) {
+            profile.gpuMemoryGB = 16;
+          } else if (renderer.includes('rtx 3090') || renderer.includes('rtx 3080')) {
+            profile.gpuMemoryGB = 12;
+          } else if (renderer.includes('rtx 3070') || renderer.includes('rtx 2080') || renderer.includes('rx 6800')) {
+            profile.gpuMemoryGB = 8;
+          } else if (renderer.includes('rtx 3060') || renderer.includes('rtx 2070') || renderer.includes('rx 6700')) {
+            profile.gpuMemoryGB = 6;
+          } else if (renderer.includes('gtx 1660') || renderer.includes('rtx 2060') || renderer.includes('rx 6600')) {
+            profile.gpuMemoryGB = 4;
+          } else if (renderer.includes('intel') && renderer.includes('iris')) {
+            profile.gpuMemoryGB = 2; // Integrated graphics
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('GPU detection failed:', e);
+    }
+    
+    // Detect monitor refresh rate
+    if (window.screen && window.screen.refreshRate) {
+      profile.refreshRate = window.screen.refreshRate;
+    } else {
+      // Estimate via requestAnimationFrame timing
+      let lastTime = performance.now();
+      let frameCount = 0;
+      const measureRefreshRate = () => {
+        const now = performance.now();
+        const delta = now - lastTime;
+        if (delta > 0) {
+          const fps = 1000 / delta;
+          frameCount++;
+          
+          if (frameCount > 10) {
+            if (fps > 110) profile.refreshRate = 120;
+            else if (fps > 200) profile.refreshRate = 240;
+            else if (fps > 50) profile.refreshRate = 60;
+            else profile.refreshRate = 30;
+          } else {
+            lastTime = now;
+            requestAnimationFrame(measureRefreshRate);
+          }
+        }
+      };
+      requestAnimationFrame(measureRefreshRate);
+    }
+    
+    // Set target FPS based on refresh rate
+    if (profile.refreshRate >= 240) profile.targetFPS = 240;
+    else if (profile.refreshRate >= 120) profile.targetFPS = 120;
+    else if (profile.refreshRate >= 60) profile.targetFPS = 60;
+    else profile.targetFPS = 30;
+    
+    // Determine device tier and recommended resolution
+    const gpuScore = profile.gpuMemoryGB;
+    const cpuScore = profile.cpuCores / 4; // Normalize to 4 cores = 1.0
+    const refreshScore = profile.refreshRate / 60; // Normalize to 60Hz = 1.0
+    const totalScore = (gpuScore * 0.6) + (cpuScore * 0.2) + (refreshScore * 0.2);
+    
+    if (totalScore >= 8) {
+      // High-end: RTX 3080+, 8+ cores, 120Hz+
+      profile.deviceTier = 'Ultra';
+      profile.recommendedTierIndex = 5; // 1024x1024 (1M particles)
+    } else if (totalScore >= 5) {
+      // High: RTX 3060+, 6+ cores, 60Hz+
+      profile.deviceTier = 'High';
+      profile.recommendedTierIndex = 4; // 768x768 (589k particles)
+    } else if (totalScore >= 3) {
+      // Medium: GTX 1660+, 4+ cores, 60Hz
+      profile.deviceTier = 'Medium';
+      profile.recommendedTierIndex = 3; // 600x600 (360k particles)
+    } else if (totalScore >= 1.5) {
+      // Low: Integrated GPU, 2-4 cores
+      profile.deviceTier = 'Low';
+      profile.recommendedTierIndex = 2; // 512x512 (262k particles)
+    } else {
+      // Very Low: Old hardware
+      profile.deviceTier = 'Very Low';
+      profile.recommendedTierIndex = 1; // 256x256 (65k particles)
+    }
+    
+    return profile;
   }
   
   getCurrentResolution() {
     return this.tiers[this.currentTierIndex];
+  }
+  
+  getHardwareProfile() {
+    return this.hardwareProfile;
   }
   
   update() {
@@ -118,9 +241,17 @@ class ResolutionManager {
 }
 
 // --- Configuration ---
+// Mobile Detection: Ensure 60 FPS on all devices
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+// Adaptive initial resolution based on device
+// Mobile: 200x200 (40k particles) for smooth 60 FPS
+// Desktop: Uses ResolutionManager (starts at 512x512, adapts up to 1024x1024)
 const resolutionManager = new ResolutionManager();
-let WIDTH = resolutionManager.getCurrentResolution();
+let WIDTH = isMobile ? 200 : resolutionManager.getCurrentResolution();
 let PARTICLES = WIDTH * WIDTH;
+
+console.log(`🎮 Device: ${isMobile ? 'Mobile' : 'Desktop'} | Initial particles: ${PARTICLES.toLocaleString()}`);
 
 // --- State ---
 let renderer, scene, camera;
@@ -178,7 +309,7 @@ async function initVisitorCounter() {
 
 // --- Initialization ---
 
-function init() {
+async function init() {
   // Initialize visitor counter (non-blocking)
   initVisitorCounter();
   
@@ -229,7 +360,7 @@ function init() {
 
   const dtPosition = gpuCompute.createTexture();
   const dtVelocity = gpuCompute.createTexture();
-  fillTextures(dtPosition, dtVelocity);
+  await fillTextures(dtPosition, dtVelocity); // Async chunked loading
 
   variablePos = gpuCompute.addVariable(
     "texturePosition",
@@ -394,7 +525,7 @@ function init() {
 // ============================================================================
 // GPGPU REGENERATION (for adaptive resolution changes)
 // ============================================================================
-function regenerateGPGPU() {
+async function regenerateGPGPU() {
   console.log(`🔄 Regenerating GPGPU at ${WIDTH}x${WIDTH}...`);
   
   // Dispose old GPGPU
@@ -407,7 +538,7 @@ function regenerateGPGPU() {
   
   const dtPosition = gpuCompute.createTexture();
   const dtVelocity = gpuCompute.createTexture();
-  fillTextures(dtPosition, dtVelocity);
+  await fillTextures(dtPosition, dtVelocity); // Async chunked loading
   
   variablePos = gpuCompute.addVariable(
     "texturePosition",
@@ -476,7 +607,9 @@ function regenerateGPGPU() {
 function updateStatsDisplay() {
   const statsDiv = document.getElementById('stats');
   if (statsDiv) {
-    statsDiv.textContent = `GPGPU | ${WIDTH}x${WIDTH} (${(PARTICLES / 1000).toFixed(0)}k particles)`;
+    const profile = resolutionManager.getHardwareProfile();
+    const particles = (PARTICLES / 1000).toFixed(0);
+    statsDiv.textContent = `${WIDTH}x${WIDTH} (${particles}k) | Target: ${profile.targetFPS} FPS | ${profile.deviceTier} Tier`;
   }
 }
 
@@ -540,20 +673,44 @@ function initAudio() {
   }
 }
 
-function fillTextures(texturePosition, textureVelocity) {
+async function fillTextures(texturePosition, textureVelocity) {
   const posArray = texturePosition.image.data;
   const velArray = textureVelocity.image.data;
+  
+  // Process 20k particles per chunk (balance between speed and responsiveness)
+  const CHUNK_SIZE = 20000 * 4; // 20k particles × 4 RGBA channels
+  const total = posArray.length;
 
-  for (let k = 0, kl = posArray.length; k < kl; k += 4) {
-    posArray[k + 0] = (Math.random() * 2 - 1) * 200;
-    posArray[k + 1] = (Math.random() * 2 - 1) * 200;
-    posArray[k + 2] = (Math.random() * 2 - 1) * 200;
-    posArray[k + 3] = 1;
+  for (let k = 0; k < total; k += CHUNK_SIZE) {
+    const end = Math.min(k + CHUNK_SIZE, total);
 
-    velArray[k + 0] = 0;
-    velArray[k + 1] = 0;
-    velArray[k + 2] = 0;
-    velArray[k + 3] = 1;
+    for (let i = k; i < end; i += 4) {
+      posArray[i + 0] = (Math.random() * 2 - 1) * 200;
+      posArray[i + 1] = (Math.random() * 2 - 1) * 200;
+      posArray[i + 2] = (Math.random() * 2 - 1) * 200;
+      posArray[i + 3] = 1;
+
+      velArray[i + 0] = 0;
+      velArray[i + 1] = 0;
+      velArray[i + 2] = 0;
+      velArray[i + 3] = 1;
+    }
+
+    // Update loading screen progress
+    const percent = Math.floor((k / total) * 100);
+    const loadingText = document.querySelector('#loading-screen div:last-child');
+    if (loadingText) {
+      loadingText.textContent = `Generating universe... ${percent}%`;
+    }
+
+    // Yield to main thread (prevents browser freeze)
+    await new Promise(resolve => setTimeout(resolve, 0));
+  }
+  
+  // Final update
+  const loadingText = document.querySelector('#loading-screen div:last-child');
+  if (loadingText) {
+    loadingText.textContent = 'Finalizing...';
   }
 }
 
@@ -682,13 +839,16 @@ window.setShape = function (id) {
 window.toggleControls = function () {
   const panel = document.getElementById("controls-panel");
   const btn = document.getElementById("controls-toggle");
+  const isHidden = panel.classList.contains("hidden");
 
-  if (panel.classList.contains("hidden")) {
+  if (isHidden) {
     panel.classList.remove("hidden");
     btn.classList.add("open");
+    btn.setAttribute('aria-expanded', 'true'); // Accessibility
   } else {
     panel.classList.add("hidden");
     btn.classList.remove("open");
+    btn.setAttribute('aria-expanded', 'false'); // Accessibility
   }
 };
 
@@ -701,13 +861,11 @@ window.updateText = function () {
 window.toggleSettings = function () {
   const panel = document.getElementById("settings-panel");
   const btn = document.getElementById("settings-btn");
-  if (panel.style.display === "flex") {
-    panel.style.display = "none";
-    btn.style.transform = "rotate(0deg)";
-  } else {
-    panel.style.display = "flex";
-    btn.style.transform = "rotate(90deg)";
-  }
+  const isOpen = panel.style.display === "flex";
+  
+  panel.style.display = isOpen ? "none" : "flex";
+  btn.style.transform = isOpen ? "rotate(0deg)" : "rotate(90deg)";
+  btn.setAttribute('aria-expanded', !isOpen); // Accessibility
 };
 
 window.setTheme = function (themeId) {
@@ -967,7 +1125,9 @@ function animate() {
   // Update stats with FPS
   const statsDiv = document.getElementById('stats');
   if (statsDiv && Math.random() < 0.1) { // Update 10% of frames to reduce overhead
-    statsDiv.textContent = `GPGPU | ${WIDTH}x${WIDTH} (${(PARTICLES / 1000).toFixed(0)}k) | ${currentFPS.toFixed(0)} FPS`;
+    const profile = resolutionManager.getHardwareProfile();
+    const particles = (PARTICLES / 1000).toFixed(0);
+    statsDiv.textContent = `${WIDTH}x${WIDTH} (${particles}k) @ ${currentFPS.toFixed(0)} FPS | ${profile.deviceTier} Tier`;
   }
 }
 

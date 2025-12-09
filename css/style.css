@@ -4,25 +4,6 @@ body {
   background-color: #000000;
   font-family: "Segoe UI", sans-serif;
 }
-canvas {
-  display: block;
-}
-
-/* Visitor Counter */
-#visitor-counter {
-  position: absolute;
-  bottom: 50px;
-  left: 20px;
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 0.7rem;
-  pointer-events: none;
-  z-index: 100;
-  font-family: 'Courier New', monospace;
-}
-
-#ui {
-  position: absolute;
-  top: 20px;
   left: 20px;
   color: rgba(255, 255, 255, 0.8);
   pointer-events: none;

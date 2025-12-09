@@ -36,6 +36,9 @@
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link rel="preconnect" href="https://api.countapi.xyz" crossorigin>
     
+    <!-- SEO: Canonical URL -->
+    <link rel="canonical" href="https://particlevisuals.vercel.app/">
+    
     <!-- Critical CSS (inline for performance) -->
     <style>
         body { margin: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; background: #000; }
@@ -48,32 +51,6 @@
     <link rel="stylesheet" href="css/style.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="css/style.css"></noscript>
     
-    <!-- JSON-LD Structured Data -->
-    <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "WebApplication",
-      "name": "ParticleVisuals - Simulation",
-      "description": "Browser-based real-time particle physics visualization tool powered by WebGL and GPU computing. Features 360,000 particles with adaptive performance optimization.",
-      "url": "https://particlevisuals.vercel.app",
-      "applicationCategory": "MultimediaApplication",
-      "operatingSystem": "Any (Browser-based)",
-      "offers": {
-        "@type": "Offer",
-        "price": "0",
-        "priceCurrency": "USD"
-      },
-      "browserRequirements": "Requires WebGL 2.0 support",
-      "softwareVersion": "2.0",
-      "author": {
-        "@type": "Organization",
-        "name": "ParticleVisuals"
-      },
-      "featureList": [
-        "Real-time GPGPU particle physics",
-        "360,000 particle simulation",
-        "Adaptive performance tuning",
-        "37+ cosmic and geometric shapes",
         "Audio-reactive visualization",
         "Multi-touch interaction",
         "32+ color themes"
@@ -83,12 +60,17 @@
 </head>
 <body>
 
+<!-- Main Content Landmark -->
+<main role="main" aria-label="Interactive particle physics visualization">
+    <!-- Canvas will be inserted here by Three.js -->
+</main>
+
 <!-- Loading Screen -->
 <div id="loading-screen">
     <div style="text-align: center;">
         <div style="font-size: 2rem; margin-bottom: 1rem;">⚛️</div>
         <div>Initializing GPGPU Physics Engine...</div>
-        <div style="font-size: 0.8rem; margin-top: 0.5rem; opacity: 0.6;">Optimizing for your GPU</div>
+        <div style="font-size: 0.8rem; margin-top: 0.5rem; opacity: 0.6;">Preparing particles... 0%</div>
     </div>
 </div>
 
@@ -98,7 +80,9 @@
 </div>
 
 <!-- Controls Toggle Button -->
-<button id="controls-toggle" class="open" onclick="toggleControls()">
+<button id="controls-toggle" class="open" onclick="toggleControls()" 
+        aria-label="Toggle shape selection menu" 
+        aria-expanded="true">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M4 6h16M4 12h16M4 18h16"/>
     </svg>
@@ -205,7 +189,9 @@
 </div>
 
 <!-- Settings Button (Gear Icon) -->
-<button id="settings-btn" onclick="toggleSettings()">
+<button id="settings-btn" onclick="toggleSettings()" 
+        aria-label="Open visual settings and color themes" 
+        aria-expanded="false">
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="3"></circle>
         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
