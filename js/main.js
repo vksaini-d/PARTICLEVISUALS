@@ -3,25 +3,6 @@ import { GPUComputationRenderer } from "./GPUComputationRenderer.js";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
-import { GUI } from "lil-gui";
-
-// Global Error Handler to catch crash-inducing errors
-window.onerror = function(message, source, lineno, colno, error) {
-  console.error("Global Error Caught:", message, error);
-  const loadingScreen = document.getElementById('loading-screen');
-  if (loadingScreen) {
-    loadingScreen.innerHTML = `
-        <div style="text-align: center; color: #ff5555; font-family: sans-serif;">
-            <div style="font-size: 2rem; margin-bottom: 1rem;">💥</div>
-            <div>Application Error</div>
-            <div style="font-size: 0.8rem; margin-top: 0.5rem; opacity: 0.8; max-width: 300px; word-wrap: break-word;">${message}</div>
-             <div style="font-size: 0.7rem; margin-top: 1rem; opacity: 0.6;">Line: ${lineno}</div>
-        </div>`;
-    // Ensure it's visible if it was fading out
-    loadingScreen.style.opacity = '1';
-    loadingScreen.style.display = 'flex';
-  }
-};
 
 import {
   velocityFragmentShader,
@@ -30,306 +11,65 @@ import {
   renderFragmentShader,
 } from "./shaders.js";
 
-// ============================================================================
-// ADAPTIVE PERFORMANCE SYSTEM - Enhanced ResolutionManager
-// ============================================================================
-class ResolutionManager {
-  constructor() {
-    // Resolution tiers: 128x128 (16k), 256x256 (65k), 512x512 (262k), 600x600 (360k), 768x768 (589k), 1024x1024 (1M)
-    this.tiers = [128, 256, 512, 600, 768, 1024];
+// Global Error Handler
+window.onerror = function(message, source, lineno, colno, error) {
+  console.error("Global Error Caught:", message, error);
+  const loadingScreen = document.getElementById('loading-screen');
+  if (loadingScreen) loadingScreen.style.display = 'none';
+};
+
+// --- CONFIGURATION ---
+// 1. MASSIVE CEILING: 4096 x 4096 = 16.7 Million particles capacity.
+const MAX_WIDTH = 4096; 
+const MAX_PARTICLES = MAX_WIDTH * MAX_WIDTH;
+
+// 2. REASONABLE START: Start with just 100k to ensure instant load on i3-5005U
+let currentActiveCount = 100000; 
+
+// Track how much of the texture we actually need to process
+let effectiveSimulationHeight = Math.ceil(currentActiveCount / MAX_WIDTH);
+
+// --- PARTICLE CONTROLLER ---
+window.setParticleCount = function(count) {
+    count = parseInt(count);
     
-    // Detect hardware capabilities
-    this.hardwareProfile = this.detectHardware();
+    // Allow going up to the massive limit
+    if (count > MAX_PARTICLES) count = MAX_PARTICLES;
+    if (count < 64) count = 64;
+
+    currentActiveCount = count;
     
-    // Set initial tier based on hardware
-    this.currentTierIndex = this.hardwareProfile.recommendedTierIndex;
+    // OPTIMIZATION: Calculate how many rows of pixels we actually need to update
+    effectiveSimulationHeight = Math.ceil(currentActiveCount / MAX_WIDTH);
     
-    // Load saved GPU tier from localStorage (override if user has proven better performance)
-    const savedTier = localStorage.getItem('gpu_tier');
-    if (savedTier !== null) {
-      const savedIndex = this.tiers.indexOf(parseInt(savedTier));
-      if (savedIndex !== -1) {
-        this.currentTierIndex = savedIndex;
-        console.log(`🚀 Loaded saved GPU tier: ${this.tiers[this.currentTierIndex]}x${this.tiers[this.currentTierIndex]}`);
-      }
+    // 1. Tell the Renderer to draw fewer points
+    if (particles && particles.geometry) {
+        particles.geometry.setDrawRange(0, currentActiveCount);
     }
     
-    // FPS monitoring
-    this.fpsHistory = [];
-    this.maxHistoryLength = 120; // 2 seconds at 60fps
-    this.lastFrameTime = performance.now();
-    this.stableHighFPSCount = 0;
-    this.stableLowFPSCount = 0;
+    console.log(`⚡ Updated: ${count.toLocaleString()} particles (Processing ${effectiveSimulationHeight}/${MAX_WIDTH} rows)`);
     
-    // Dynamic FPS targets based on monitor refresh rate
-    this.TARGET_FPS_HIGH = this.hardwareProfile.targetFPS * 0.95; // 95% of max refresh
-    this.TARGET_FPS_LOW = Math.max(30, this.hardwareProfile.targetFPS * 0.5); // 50% of target, min 30
     
-    // Tuning thresholds
-    this.UPGRADE_THRESHOLD = 120; // 2 seconds of high FPS
-    this.DOWNGRADE_THRESHOLD = 60; // 1 second of low FPS
-    
-    this.isStable = false;
-    this.needsRegeneration = false;
-    
-    // Log hardware profile
-    console.log(`🖥️ Hardware Profile:`, this.hardwareProfile);
-  }
-  
-  detectHardware() {
-    const profile = {
-      gpuVendor: 'Unknown',
-      gpuRenderer: 'Unknown',
-      gpuMemoryGB: 2, // Default estimate
-      cpuCores: navigator.hardwareConcurrency || 4,
-      refreshRate: 60, // Default
-      targetFPS: 60,
-      recommendedTierIndex: 2, // Default to 512x512
-      deviceTier: 'Medium'
-    };
-    
-    // Detect GPU via WebGL (avoid deprecated extension in Firefox)
-    try {
-      const canvas = document.createElement('canvas');
-      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-      
-      if (gl) {
-        // Detect Firefox to avoid deprecation warning
-        const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
-        
-        if (!isFirefox) {
-          // Use debug extension only in non-Firefox browsers
-          const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
-          if (debugInfo) {
-            try {
-              profile.gpuVendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) || 'Unknown';
-              profile.gpuRenderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) || 'Unknown';
-            } catch (e) {
-              // Fallback to standard parameters
-              profile.gpuRenderer = gl.getParameter(gl.RENDERER) || 'Unknown';
-              profile.gpuVendor = gl.getParameter(gl.VENDOR) || 'Unknown';
-            }
-          } else {
-            // Extension not available - use standard WebGL parameters
-            profile.gpuRenderer = gl.getParameter(gl.RENDERER) || 'Unknown';
-            profile.gpuVendor = gl.getParameter(gl.VENDOR) || 'Unknown';
-          }
-        } else {
-          // Firefox: Use standard WebGL parameters to avoid deprecation warning
-          profile.gpuRenderer = gl.getParameter(gl.RENDERER) || 'Unknown';
-          profile.gpuVendor = gl.getParameter(gl.VENDOR) || 'Unknown';
-        }
-        
-        // Estimate GPU memory from renderer string
-        const renderer = profile.gpuRenderer.toLowerCase();
-        if (renderer.includes('rtx 4090') || renderer.includes('rtx 4080')) {
-          profile.gpuMemoryGB = 16;
-        } else if (renderer.includes('rtx 3090') || renderer.includes('rtx 3080')) {
-          profile.gpuMemoryGB = 12;
-        } else if (renderer.includes('rtx 3070') || renderer.includes('rtx 2080') || renderer.includes('rx 6800')) {
-          profile.gpuMemoryGB = 8;
-        } else if (renderer.includes('rtx 3060') || renderer.includes('rtx 2070') || renderer.includes('rx 6700')) {
-          profile.gpuMemoryGB = 6;
-        } else if (renderer.includes('gtx 1660') || renderer.includes('rtx 2060') || renderer.includes('rx 6600')) {
-          profile.gpuMemoryGB = 4;
-        } else if (renderer.includes('intel') && renderer.includes('iris')) {
-          profile.gpuMemoryGB = 2; // Integrated graphics
-        }
-      }
-    } catch (e) {
-      console.warn('GPU detection failed:', e);
-    }
-    
-    // Detect monitor refresh rate
-    if (window.screen && window.screen.refreshRate) {
-      profile.refreshRate = window.screen.refreshRate;
+    // Update display text
+    if (window.updateParticleCountDisplay) {
+        window.updateParticleCountDisplay(count);
     } else {
-      // Estimate via requestAnimationFrame timing
-      let lastTime = performance.now();
-      let frameCount = 0;
-      const measureRefreshRate = () => {
-        const now = performance.now();
-        const delta = now - lastTime;
-        if (delta > 0) {
-          const fps = 1000 / delta;
-          frameCount++;
-          
-          if (frameCount > 10) {
-            if (fps > 110) profile.refreshRate = 120;
-            else if (fps > 200) profile.refreshRate = 240;
-            else if (fps > 50) profile.refreshRate = 60;
-            else profile.refreshRate = 30;
-          } else {
-            lastTime = now;
-            requestAnimationFrame(measureRefreshRate);
-          }
-        }
-      };
-      requestAnimationFrame(measureRefreshRate);
+        const statsDiv = document.getElementById('particle-value-display');
+        if (statsDiv) statsDiv.textContent = (count / 1000).toFixed(0) + 'k';
     }
-    
-    // Set target FPS based on refresh rate
-    if (profile.refreshRate >= 240) profile.targetFPS = 240;
-    else if (profile.refreshRate >= 120) profile.targetFPS = 120;
-    else if (profile.refreshRate >= 60) profile.targetFPS = 60;
-    else profile.targetFPS = 30;
-    
-    // Determine device tier and recommended resolution
-    const gpuScore = profile.gpuMemoryGB;
-    const cpuScore = profile.cpuCores / 4; // Normalize to 4 cores = 1.0
-    const refreshScore = profile.refreshRate / 60; // Normalize to 60Hz = 1.0
-    const totalScore = (gpuScore * 0.6) + (cpuScore * 0.2) + (refreshScore * 0.2);
-    
-    if (totalScore >= 8) {
-      // High-end: RTX 3080+, 8+ cores, 120Hz+
-      profile.deviceTier = 'Ultra';
-      profile.recommendedTierIndex = 5; // 1024x1024 (1M particles)
-    } else if (totalScore >= 5) {
-      // High: RTX 3060+, 6+ cores, 60Hz+
-      profile.deviceTier = 'High';
-      profile.recommendedTierIndex = 4; // 768x768 (589k particles)
-    } else if (totalScore >= 3) {
-      // Medium: GTX 1660+, 4+ cores, 60Hz
-      profile.deviceTier = 'Medium';
-      profile.recommendedTierIndex = 3; // 600x600 (360k particles)
-    } else if (totalScore >= 1.5) {
-      // Low: Integrated GPU, 2-4 cores
-      profile.deviceTier = 'Low';
-      profile.recommendedTierIndex = 2; // 512x512 (262k particles)
-    } else {
-      // Very Low: Old hardware
-      profile.deviceTier = 'Very Low';
-      profile.recommendedTierIndex = 1; // 256x256 (65k particles)
-    }
-    
-    return profile;
-  }
-  
-  getCurrentResolution() {
-    return this.tiers[this.currentTierIndex];
-  }
-  
-  getHardwareProfile() {
-    return this.hardwareProfile;
-  }
-  
-  update() {
-    const now = performance.now();
-    const delta = now - this.lastFrameTime;
-    const fps = 1000 / delta;
-    this.lastFrameTime = now;
-    
-    this.fpsHistory.push(fps);
-    if (this.fpsHistory.length > this.maxHistoryLength) {
-      this.fpsHistory.shift();
-    }
-    
-    // Check for upgrade opportunity
-    if (fps > this.TARGET_FPS_HIGH) {
-      this.stableHighFPSCount++;
-      this.stableLowFPSCount = 0;
-      
-      if (this.stableHighFPSCount >= this.UPGRADE_THRESHOLD && this.currentTierIndex < this.tiers.length - 1) {
-        this.currentTierIndex++;
-        this.needsRegeneration = true;
-        this.stableHighFPSCount = 0;
-        this.isStable = false;
-        console.log(`⬆️ Upgrading to ${this.getCurrentResolution()}x${this.getCurrentResolution()} (${this.getCurrentResolution() * this.getCurrentResolution()} particles)`);
-      }
-    }
-    // Check for downgrade necessity
-    else if (fps < this.TARGET_FPS_LOW) {
-      this.stableLowFPSCount++;
-      this.stableHighFPSCount = 0;
-      
-      if (this.stableLowFPSCount >= this.DOWNGRADE_THRESHOLD && this.currentTierIndex > 0) {
-        this.currentTierIndex--;
-        this.needsRegeneration = true;
-        this.stableLowFPSCount = 0;
-        this.isStable = false;
-        console.log(`⬇️ Downgrading to ${this.getCurrentResolution()}x${this.getCurrentResolution()} (${this.getCurrentResolution() * this.getCurrentResolution()} particles)`);
-      }
-    }
-    // Stable range
-    else {
-      this.stableHighFPSCount = 0;
-      this.stableLowFPSCount = 0;
-      
-      // Mark as stable after 5 seconds of consistent performance
-      if (this.fpsHistory.length >= 300 && !this.isStable) {
-        this.isStable = true;
-        this.saveGPUTier();
-      }
-    }
-    
-    return fps;
-  }
-  
-  saveGPUTier() {
-    const resolution = this.getCurrentResolution();
-    localStorage.setItem('gpu_tier', resolution.toString());
-    console.log(`💾 Saved optimal GPU tier: ${resolution}x${resolution}`);
-  }
-  
-  checkAndReset() {
-    if (this.needsRegeneration) {
-      this.needsRegeneration = false;
-      return true;
-    }
-    return false;
-  }
-  
-  // Progressive loading: Start low, upgrade to target
-  startProgressiveUpgrade(targetTierIndex) {
-    this.targetTierIndex = targetTierIndex;
-    this.upgradeScheduled = true;
-    this.upgradeFrameCounter = 0;
-    this.upgradeFrameDelay = 60; // Wait 60 frames (~1 second at 60fps) between upgrades
-    console.log(`📈 Progressive upgrade scheduled: ${this.tiers[0]}x${this.tiers[0]} → ${this.tiers[targetTierIndex]}x${this.tiers[targetTierIndex]}`);
-  }
-  
-  checkProgressiveUpgrade() {
-    if (this.upgradeScheduled && this.currentTierIndex < this.targetTierIndex) {
-      this.upgradeFrameCounter++;
-      
-      // Only upgrade after delay
-      if (this.upgradeFrameCounter >= this.upgradeFrameDelay) {
-        this.upgradeFrameCounter = 0; // Reset for next upgrade
-        this.currentTierIndex++;
-        this.needsRegeneration = true;
-        
-        if (this.currentTierIndex >= this.targetTierIndex) {
-          this.upgradeScheduled = false;
-          console.log(`✅ Progressive upgrade complete: ${this.getCurrentResolution()}x${this.getCurrentResolution()}`);
-        } else {
-          console.log(`⏫ Upgrading to ${this.getCurrentResolution()}x${this.getCurrentResolution()}...`);
-        }
-        return true;
-      }
-    }
-    return false;
-  }
-}
+};
 
-// --- Configuration ---
-// Mobile Detection: Ensure 60 FPS on all devices
-const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-
-// PROGRESSIVE LOADING STRATEGY:
-// Always start with minimal particles (128x128 = 16k) for instant display
-// Then progressively upgrade to device-optimal resolution
-const resolutionManager = new ResolutionManager();
-const targetTierIndex = resolutionManager.currentTierIndex; // Save target tier
-resolutionManager.currentTierIndex = 0; // Force start at lowest tier (128x128)
-
-let WIDTH = isMobile ? 200 : 128; // Mobile: 200x200, Desktop: 128x128 for fast initial load
-let PARTICLES = WIDTH * WIDTH;
-
-console.log(`🎮 Device: ${isMobile ? 'Mobile' : 'Desktop'} | Initial particles: ${PARTICLES.toLocaleString()}`);
-if (!isMobile) {
-  const targetRes = resolutionManager.tiers[targetTierIndex];
-  console.log(`📈 Will upgrade to: ${targetRes}x${targetRes} (${(targetRes * targetRes).toLocaleString()} particles)`);
-}
+window.updateParticleCountDisplay = function(count) {
+    const kVal = (count / 1000).toFixed(0) + 'k';
+    
+    // 1. Settings Panel Display
+    const display1 = document.getElementById('particle-value-display');
+    if(display1) display1.textContent = kVal;
+    
+    // 2. Shapes Panel Header Display
+    const display2 = document.getElementById('particle-header-display');
+    if(display2) display2.textContent = kVal + ' Particles';
+};
 
 // --- State ---
 let renderer, scene, camera;
@@ -338,162 +78,72 @@ let gpuCompute;
 let variablePos, variableVel;
 let positionUniforms, velocityUniforms, renderUniforms;
 let currentShape = 0;
+let bloomPass, composer;
+let lastMouseX = 0, lastMouseY = 0, lastMouseTime = 0;
+
 let params = {
   bloomStrength: 0.15,
-  bloomRadius: 0.01,
+  bloomRadius: 0.005,
   bloomThreshold: 0.8,
   rotationSpeed: 0.05,
   audioSensitivity: 1.0,
   timeScale: 1.0,
 };
-let composer; // Post-processing
-let gui; // GUI Settings
-const mouse = new THREE.Vector2(-1000, -1000);
-const raycaster = new THREE.Raycaster();
-const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
 
-// Loading screen flag
-let isFirstFrame = true;
-
-// PHASE 5: Gravity Wells
-let gravityWells = []; // Array of {position: Vector3, strength: float}
-const MAX_WELLS = 5;
-
-// ============================================================================
-// FIXED TIMESTEP PHYSICS (High-Refresh Rate Support)
-// ============================================================================
-const FIXED_TIMESTEP = 1000 / 60; // 60 physics updates per second
+// Physics Timer
+const FIXED_TIMESTEP = 1000 / 60;
 let physicsAccumulator = 0;
 let lastPhysicsTime = performance.now();
 
-// ============================================================================
-// VISITOR COUNTER
-// ============================================================================
-async function initVisitorCounter() {
-  try {
-    // Use localStorage for a simple local visitor counter
-    let visits = parseInt(localStorage.getItem('particle_visits') || '0');
-    visits++;
-    localStorage.setItem('particle_visits', visits.toString());
-    
-    // Display local visit count
-    const counterElement = document.getElementById('visitor-count');
-    if (counterElement) {
-      counterElement.textContent = visits.toLocaleString();
-      console.log(`👁️ Your visits: ${visits}`);
-    }
-  } catch (error) {
-    console.warn('Visitor counter failed:', error);
-    const counterElement = document.getElementById('visitor-count');
-    if (counterElement) {
-      counterElement.textContent = '∞';
-    }
-  }
-}
-
-// --- Initialization ---
+// Audio
+let audioContext, analyser, dataArray, audioInitialized = false;
 
 async function init() {
-  // Initialize visitor counter (non-blocking)
-  initVisitorCounter();
-  
   const container = document.body;
-  
-  // Force GPU usage with optimized WebGL context
-  const canvas = document.createElement('canvas');
-  const contextAttributes = {
-    alpha: false,
-    antialias: false, // Disable for better performance, use post-processing instead
-    depth: false,
-    stencil: false,
-    powerPreference: 'high-performance',
-    failIfMajorPerformanceCaveat: false,
-    desynchronized: true, // Reduce latency, improve GPU utilization
-    preserveDrawingBuffer: false
-  };
-  
-  // Try to get WebGL2 context first (better GPU utilization)
-  const gl = canvas.getContext('webgl2', contextAttributes) || 
-             canvas.getContext('webgl', contextAttributes);
-  
-  if (!gl) {
-    console.error('WebGL not supported');
-    return;
-  }
-  
-  console.log(`🎮 Using ${gl instanceof WebGL2RenderingContext ? 'WebGL2' : 'WebGL'} with GPU acceleration`);
-  
+
+  // 1. Renderer Setup
   renderer = new THREE.WebGLRenderer({
-    canvas: canvas,
-    context: gl,
-    antialias: false, // Disabled for performance
+    antialias: false,
     powerPreference: "high-performance",
-    stencil: false,
+    stencil: false, // We don't need stencil, but we WILL use scissor
     depth: false,
-    alpha: false,
-    logarithmicDepthBuffer: false,
-    precision: 'highp' // Force high precision on GPU
+    alpha: false
   });
   
-  // Optimize renderer settings for GPU
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Cap at 2x for performance
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2.0));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.2;
-  renderer.sortObjects = false; // Disable CPU sorting
-  renderer.autoClear = true;
-  
   container.appendChild(renderer.domElement);
-  
-  console.log('✅ GPU-accelerated renderer initialized');
 
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x000000); // Pure black
+  scene.background = new THREE.Color(0x000000);
 
-  camera = new THREE.PerspectiveCamera(
-    50,
-    window.innerWidth / window.innerHeight,
-    1,
-    3000
-  );
-  camera.position.z = 400;
+  camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 1, 5000);
+  camera.position.z = 600;
 
-  // --- Post Processing (Bloom) ---
+  // 2. Post Processing
   const renderScene = new RenderPass(scene, camera);
-
-  // Bloom - High Contrast Configuration
-  // Bloom - High Contrast Configuration with Optimized Resolution
-  bloomPass = new UnrealBloomPass(
-    new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2), // Half resolution for speed
-    1.5,
-    0.4,
-    0.85
-  );
-  bloomPass.strength = 0.2; // Slightly higher strength for "pop"
-  bloomPass.radius = 0.002; // Very low radius to prevent "milky" background
-  bloomPass.threshold = 0.85; // Only brightest particles glow, keeping background black
+  bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth/2, window.innerHeight/2), 1.5, 0.4, 0.85);
+  bloomPass.strength = params.bloomStrength;
+  bloomPass.radius = params.bloomRadius;
+  bloomPass.threshold = params.bloomThreshold;
 
   composer = new EffectComposer(renderer);
   composer.addPass(renderScene);
   composer.addPass(bloomPass);
 
-  // --- GPGPU Setup ---
-  gpuCompute = new GPUComputationRenderer(WIDTH, WIDTH, renderer);
+  // 3. GPGPU Setup (ALLOCATE ONCE)
+  gpuCompute = new GPUComputationRenderer(MAX_WIDTH, MAX_WIDTH, renderer);
 
   const dtPosition = gpuCompute.createTexture();
   const dtVelocity = gpuCompute.createTexture();
-  await fillTextures(dtPosition, dtVelocity); // Async chunked loading
+  
+  // Instant Fill (Zeros)
+  fillTextures(dtPosition, dtVelocity);
 
-  variablePos = gpuCompute.addVariable(
-    "texturePosition",
-    positionFragmentShader,
-    dtPosition
-  );
-  variableVel = gpuCompute.addVariable(
-    "textureVelocity",
-    velocityFragmentShader,
-    dtVelocity
-  );
+  variablePos = gpuCompute.addVariable("texturePosition", positionFragmentShader, dtPosition);
+  variableVel = gpuCompute.addVariable("textureVelocity", velocityFragmentShader, dtVelocity);
 
   gpuCompute.setVariableDependencies(variablePos, [variablePos, variableVel]);
   gpuCompute.setVariableDependencies(variableVel, [variablePos, variableVel]);
@@ -501,67 +151,59 @@ async function init() {
   positionUniforms = variablePos.material.uniforms;
   velocityUniforms = variableVel.material.uniforms;
 
+  // Initialize Uniforms
   velocityUniforms.time = { value: 0.0 };
   velocityUniforms.shape = { value: 0 };
+  velocityUniforms.uReset = { value: 1.0 }; 
   velocityUniforms.uMouse = { value: new THREE.Vector3(0, 0, 0) };
   velocityUniforms.uMouseActive = { value: 0.0 };
-  velocityUniforms.uClick = { value: 0.0 }; // Black Hole Trigger
-  velocityUniforms.uReset = { value: 1.0 }; // Start with RESET enabled for instant init
+  velocityUniforms.uClick = { value: 0.0 };
   velocityUniforms.textTexture = { value: new THREE.Texture() };
-  velocityUniforms.uSound = { value: 0.0 }; // Audio Reactivity
+  velocityUniforms.uSound = { value: 0.0 };
   velocityUniforms.uBass = { value: 0.0 };
   velocityUniforms.uMid = { value: 0.0 };
   velocityUniforms.uHigh = { value: 0.0 };
   velocityUniforms.uMouseVel = { value: new THREE.Vector2(0, 0) };
   velocityUniforms.uBlow = { value: 0.0 };
-
-  // PHASE 5: Gravity Wells (up to 5 wells)
   velocityUniforms.uWellCount = { value: 0 };
-  velocityUniforms.uWells = { value: new Float32Array(MAX_WELLS * 4) }; // xyz position + strength
+  velocityUniforms.uWells = { value: new Float32Array(20) };
 
   const error = gpuCompute.init();
   if (error !== null) {
       console.error(error);
-      const loadingScreen = document.getElementById('loading-screen');
-      if (loadingScreen) {
-          loadingScreen.innerHTML = `
-            <div style="text-align: center; color: #ff5555;">
-                <div style="font-size: 2rem; margin-bottom: 1rem;">⚠️</div>
-                <div>GPU Initialization Failed</div>
-                <div style="font-size: 0.8rem; margin-top: 0.5rem; opacity: 0.8;">${error}</div>
-            </div>`;
-      }
-      return; 
+      alert("GPU Init Error: " + error);
+      return;
   }
 
-  // --- INSTANT GPU INITIALIZATION ---
-  // Run one frame with uReset=1 to generate random positions on GPU
-  gpuCompute.compute();
-  velocityUniforms.uReset.value = 0.0; // Turn off reset for normal physics
-
+  // 4. Particle System Setup
   const geometry = new THREE.BufferGeometry();
-  const positions = new Float32Array(PARTICLES * 3);
-
+  
+  // Allocate buffer for 16M particles (Fast in JS)
+  const positions = new Float32Array(MAX_PARTICLES * 3);
+  
+  // Optimized UV Generation
   let p = 0;
-  for (let i = 0; i < WIDTH; i++) {
-    for (let j = 0; j < WIDTH; j++) {
-      positions[p++] = i / (WIDTH - 1);
-      positions[p++] = j / (WIDTH - 1);
+  for (let i = 0; i < MAX_WIDTH; i++) {
+    for (let j = 0; j < MAX_WIDTH; j++) {
+      positions[p++] = i / (MAX_WIDTH - 1);
+      positions[p++] = j / (MAX_WIDTH - 1);
       positions[p++] = 0;
     }
   }
-
   geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  
+  // **CRITICAL**: Only draw the active particles
+  geometry.setDrawRange(0, currentActiveCount);
 
   const material = new THREE.ShaderMaterial({
     uniforms: {
       texturePosition: { value: null },
       textureVelocity: { value: null },
-      size: { value: 1.0 },
+      size: { value: 0.6 }, 
       colorTheme: { value: 0 },
       time: { value: 0.0 },
-      shape: { value: 0 }, // Added shape uniform
-      uSound: { value: 0.0 }, // Audio Reactivity
+      shape: { value: 0 },
+      uSound: { value: 0.0 },
       uBass: { value: 0.0 },
       uMid: { value: 0.0 },
       uHigh: { value: 0.0 },
@@ -574,378 +216,102 @@ async function init() {
   });
 
   renderUniforms = material.uniforms;
-
   particles = new THREE.Points(geometry, material);
+  particles.frustumCulled = false; 
   scene.add(particles);
 
-  // Generate default text texture
-  generateTextTexture("HELLO");
-
-  window.addEventListener("resize", onWindowResize);
-  window.addEventListener("mousemove", onMouseMove);
-  window.addEventListener("touchmove", onTouchMove);
-  window.addEventListener("touchstart", onTouchMove);
-  window.addEventListener("touchend", () => {
-    velocityUniforms.uMouseActive.value = 0.0;
-  });
-
-  // Black Hole Interaction
-  window.addEventListener("mousedown", (e) => {
-    if (e.button === 0) {
-      // Left click
-      velocityUniforms.uClick.value = 1.0;
-      initAudio();
-    } else if (e.button === 2) {
-      // Right click - Place Gravity Well
-      e.preventDefault();
-      placeGravityWell(e.clientX, e.clientY);
-    }
-  });
-  window.addEventListener("mouseup", () => {
-    velocityUniforms.uClick.value = 0.0;
-  });
-  window.addEventListener("contextmenu", (e) => e.preventDefault()); // Disable context menu
-  window.addEventListener("touchstart", () => {
-    velocityUniforms.uClick.value = 1.0;
-    initAudio();
-  });
-  window.addEventListener("touchend", () => {
-    velocityUniforms.uClick.value = 0.0;
-  });
-  window.addEventListener("click", (e) => {
-    if (e.ctrlKey || e.metaKey) {
-      // Ctrl+Click or Cmd+Click for Gravity Well
-      placeGravityWell(e.clientX, e.clientY);
-    }
-    initAudio();
-  });
-
-  // Mouse Velocity Tracking
-  window.addEventListener("mousemove", (e) => {
-    const now = performance.now();
-    const dt = now - lastMouseTime;
-    if (dt > 0) {
-      const dx = e.clientX - lastMouseX;
-      const dy = e.clientY - lastMouseY;
-      // Normalized velocity
-      velocityUniforms.uMouseVel.value.set(dx / dt, dy / dt);
-    }
-    lastMouseX = e.clientX;
-    lastMouseY = e.clientY;
-    lastMouseTime = now;
-  });
-
-  // Time Control
-  window.addEventListener("wheel", (e) => {
-    params.timeScale += e.deltaY * -0.001;
-    params.timeScale = Math.max(0.1, Math.min(5.0, params.timeScale));
-  });
-  
-  // Initialize GUI
-  initGUI(bloomPass);
-
-  // Restore user preferences after uniforms are initialized
-  restoreUserPreferences();
-  
-  // Start progressive upgrade for desktop (mobile stays at 200x200)
-  if (!isMobile && targetTierIndex > 0) {
-    resolutionManager.startProgressiveUpgrade(targetTierIndex);
-  }
-
-  // Force remove loading screen (it should say "Ready!" by now)
+  // 5. Cleanup Loading Screen immediately
   const loadingScreen = document.getElementById('loading-screen');
-  if (loadingScreen && loadingScreen.parentNode) {
-      console.log("Force removing loading screen");
+  if (loadingScreen) {
       loadingScreen.style.opacity = '0';
-      loadingScreen.style.transition = 'opacity 0.5s';
-      setTimeout(() => {
-          if (loadingScreen.parentNode) loadingScreen.parentNode.removeChild(loadingScreen);
-      }, 500);
+      setTimeout(() => loadingScreen.remove(), 500);
   }
 
-  // Start animation loop
+  // 6. Interaction & Settings
+  const savedShape = localStorage.getItem('last_shape');
+  if(savedShape) window.setShape(parseInt(savedShape));
+  
+  window.addEventListener("resize", onWindowResize);
+  setupInteraction();
+  
+  // Initialize calculation for Scissor optimization
+  effectiveSimulationHeight = Math.ceil(currentActiveCount / MAX_WIDTH);
+
+  // Sync UI with actual initial values
+  if(document.getElementById('pixel-ratio')) {
+      const pr = renderer.getPixelRatio();
+      document.getElementById('pixel-ratio').value = pr;
+      document.getElementById('pixel-ratio-value').textContent = pr.toFixed(3);
+  }
+  if(document.getElementById('dot-size')) {
+     const ds = renderUniforms.size.value;
+     document.getElementById('dot-size').value = ds;
+     document.getElementById('dot-size-value').textContent = ds.toFixed(3);
+  }
+  // Sync others if needed, but defaults roughly match
+  
   animate();
 }
 
-// ============================================================================
-// GPGPU REGENERATION (for adaptive resolution changes)
-// ============================================================================
-async function regenerateGPGPU() {
-  console.log(`🔄 Regenerating GPGPU at ${WIDTH}x${WIDTH}...`);
-  
-  // Dispose old GPGPU
-  if (gpuCompute) {
-    gpuCompute.dispose();
-  }
-  
-  // Recreate GPGPU with new resolution
-  gpuCompute = new GPUComputationRenderer(WIDTH, WIDTH, renderer);
-  
-  const dtPosition = gpuCompute.createTexture();
-  const dtVelocity = gpuCompute.createTexture();
-  await fillTextures(dtPosition, dtVelocity); // Async chunked loading
-  
-  variablePos = gpuCompute.addVariable(
-    "texturePosition",
-    positionFragmentShader,
-    dtPosition
-  );
-  variableVel = gpuCompute.addVariable(
-    "textureVelocity",
-    velocityFragmentShader,
-    dtVelocity
-  );
-  
-  gpuCompute.setVariableDependencies(variablePos, [variablePos, variableVel]);
-  gpuCompute.setVariableDependencies(variableVel, [variablePos, variableVel]);
-  
-  positionUniforms = variablePos.material.uniforms;
-  velocityUniforms = variableVel.material.uniforms;
-  
-  // Restore all uniforms
-  velocityUniforms.time = { value: renderUniforms.time.value };
-  velocityUniforms.shape = { value: currentShape };
-  velocityUniforms.uReset = { value: 1.0 }; // RESET ON REGENERATION
-  velocityUniforms.uMouse = { value: new THREE.Vector3(0, 0, 0) };
-  velocityUniforms.uMouseActive = { value: 0.0 };
-  velocityUniforms.uClick = { value: 0.0 };
-  velocityUniforms.textTexture = { value: new THREE.Texture() };
-  velocityUniforms.uSound = { value: 0.0 };
-  velocityUniforms.uBass = { value: 0.0 };
-  velocityUniforms.uMid = { value: 0.0 };
-  velocityUniforms.uHigh = { value: 0.0 };
-  velocityUniforms.uMouseVel = { value: new THREE.Vector2(0, 0) };
-  velocityUniforms.uBlow = { value: 0.0 };
-  velocityUniforms.uWellCount = { value: gravityWells.length };
-  velocityUniforms.uWells = { value: new Float32Array(MAX_WELLS * 4) };
-  
-  const error = gpuCompute.init();
-  if (error !== null) {
-    console.error('GPGPU Regeneration Error:', error);
-    return;
-  }
-  
-  // Instant GPU Init for new resolution
-  gpuCompute.compute();
-  velocityUniforms.uReset.value = 0.0;
-  
-  // Recreate particle geometry
-  const geometry = new THREE.BufferGeometry();
-  const positions = new Float32Array(PARTICLES * 3);
-  
-  let p = 0;
-  for (let i = 0; i < WIDTH; i++) {
-    for (let j = 0; j < WIDTH; j++) {
-      positions[p++] = i / (WIDTH - 1);
-      positions[p++] = j / (WIDTH - 1);
-      positions[p++] = 0;
-    }
-  }
-  
-  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-  
-  // Update particle system
-  particles.geometry.dispose();
-  particles.geometry = geometry;
-  
-  // Update stats
-  updateStatsDisplay();
-  
-  console.log(`✅ GPGPU regenerated: ${PARTICLES.toLocaleString()} particles`);
-}
-
-function updateStatsDisplay() {
-  const statsDiv = document.getElementById('stats');
-  if (statsDiv) {
-    const profile = resolutionManager.getHardwareProfile();
-    const particles = (PARTICLES / 1000).toFixed(0);
-    
-    // Show upgrade status if in progress
-    let statusText = `${WIDTH}x${WIDTH} (${particles}k) | Target: ${profile.targetFPS} FPS | ${profile.deviceTier} Tier`;
-    
-    if (resolutionManager.upgradeScheduled) {
-      const targetRes = resolutionManager.tiers[resolutionManager.targetTierIndex];
-      const targetParticles = (targetRes * targetRes / 1000).toFixed(0);
-      statusText += ` | ⏫ Upgrading to ${targetParticles}k...`;
-    }
-    
-    statsDiv.textContent = statusText;
-  }
-}
-
-let lastMouseX = 0,
-  lastMouseY = 0,
-  lastMouseTime = 0;
-
-function initGUI(bloomPass) {
-  gui = new GUI({ title: "Settings" });
-
-  const folderVisuals = gui.addFolder("Visuals");
-  folderVisuals
-    .add(params, "bloomStrength", 0.0, 3.0)
-    .onChange((v) => (bloomPass.strength = v));
-  folderVisuals
-    .add(params, "bloomRadius", 0.0, 1.0)
-    .onChange((v) => (bloomPass.radius = v));
-  folderVisuals
-    .add(params, "bloomThreshold", 0.0, 1.0)
-    .onChange((v) => (bloomPass.threshold = v));
-
-  const folderSim = gui.addFolder("Simulation");
-  folderSim.add(params, "rotationSpeed", 0.0, 0.5);
-  folderSim.add(params, "timeScale", -2.0, 2.0).name("Time Scale");
-
-  const folderAudio = gui.addFolder("Audio");
-  folderAudio.add(params, "audioSensitivity", 0.0, 5.0);
-
-  gui.close(); // Start closed
-}
-
-// --- Audio Analysis ---
-let audioContext, analyser, dataArray;
-let audioInitialized = false;
-
-function initAudio() {
-  if (audioInitialized) return;
-
-  try {
-    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    analyser = audioContext.createAnalyser();
-    analyser.fftSize = 256;
-    dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-    navigator.mediaDevices
-      .getUserMedia({ audio: true })
-      .then((stream) => {
-        const source = audioContext.createMediaStreamSource(stream);
-        source.connect(analyser);
-        audioInitialized = true;
-        console.log("Audio initialized");
-      })
-      .catch((err) => {
-        console.warn("Audio init failed (microphone denied?):", err);
-        // Fallback or silent mode
-      });
-
-    audioInitialized = true; // Prevent multiple attempts even if failed
-  } catch (e) {
-    console.error("Audio Context Error:", e);
-  }
-}
-
-async function fillTextures(texturePosition, textureVelocity) {
-  // INSTANT ALLOCATION NO CPU GENERATION
-  const posArray = texturePosition.image.data; // Float32Array is already zero-initialized by default
+function fillTextures(texturePosition, textureVelocity) {
+  const posArray = texturePosition.image.data;
   const velArray = textureVelocity.image.data;
-  
-  // We just fill the w component (life/mass) to 1.0, everything else can be 0 (handled by GPU init)
-  // Even this Loop is fast (4M operations is ~10ms in bulk)
-  // Or even faster: just let GPU handle it? 
-  // Safety: Set alpha/w component to 1
-  
-  const total = posArray.length;
-  for (let i = 3; i < total; i += 4) {
-      posArray[i] = 1; // mass/life
-      velArray[i] = 1; 
-  }
-
-  // Update loading text immediately
-  const loadingText = document.querySelector('#loading-screen div:last-child');
-  if (loadingText) loadingText.textContent = 'Allocating GPU Buffers...';
-  
-  // Yield once to show text
-  await new Promise(resolve => setTimeout(resolve, 0));
-}
-
-// PHASE 5: Gravity Wells Functions
-function placeGravityWell(x, y) {
-  mouse.x = (x / window.innerWidth) * 2 - 1;
-  mouse.y = -(y / window.innerHeight) * 2 + 1;
-
-  raycaster.setFromCamera(mouse, camera);
-  const intersect = new THREE.Vector3();
-  raycaster.ray.intersectPlane(plane, intersect);
-
-  if (intersect) {
-    if (gravityWells.length >= MAX_WELLS) {
-      gravityWells.shift(); // Remove oldest well
-    }
-
-    gravityWells.push({
-      position: intersect.clone(),
-      strength: 3.0,
-      life: 1.0, // For visual decay
-    });
-
-    updateGravityWells();
-    console.log(
-      `Gravity Well placed at (${intersect.x.toFixed(1)}, ${intersect.y.toFixed(
-        1
-      )}, ${intersect.z.toFixed(1)})`
-    );
+  // Initialize with zeros (Instant)
+  posArray.fill(0);
+  velArray.fill(0);
+  // Set 'w' component (life/mass) to 1.0
+  for (let i = 3; i < posArray.length; i += 4) {
+      posArray[i] = 1; 
+      velArray[i] = 1;
   }
 }
 
-function updateGravityWells() {
-  const wellData = velocityUniforms.uWells.value;
+function animate() {
+  requestAnimationFrame(animate);
 
-  for (let i = 0; i < MAX_WELLS; i++) {
-    if (i < gravityWells.length) {
-      const well = gravityWells[i];
-      wellData[i * 4 + 0] = well.position.x;
-      wellData[i * 4 + 1] = well.position.y;
-      wellData[i * 4 + 2] = well.position.z;
-      wellData[i * 4 + 3] = well.strength;
-    } else {
-      wellData[i * 4 + 0] = 0;
-      wellData[i * 4 + 1] = 0;
-      wellData[i * 4 + 2] = 0;
-      wellData[i * 4 + 3] = 0;
-    }
+  const currentTime = performance.now();
+  const frameTime = currentTime - lastPhysicsTime;
+  lastPhysicsTime = currentTime;
+  physicsAccumulator += frameTime;
+  if (physicsAccumulator > 200) physicsAccumulator = 200;
+
+  while (physicsAccumulator >= FIXED_TIMESTEP) {
+    const dt = FIXED_TIMESTEP / 1000;
+    velocityUniforms.time.value += dt * params.timeScale;
+    physicsAccumulator -= FIXED_TIMESTEP;
   }
-
-  velocityUniforms.uWellCount.value = gravityWells.length;
-}
-
-window.clearGravityWells = function () {
-  gravityWells = [];
-  updateGravityWells();
-  console.log("All gravity wells cleared");
-};
-
-// Throttle mouse updates to reduce CPU overhead
-let lastMouseUpdateTime = 0;
-const MOUSE_UPDATE_INTERVAL = 16; // ~60fps max for mouse updates
-
-function onMouseMove(event) {
-  const now = performance.now();
-  if (now - lastMouseUpdateTime < MOUSE_UPDATE_INTERVAL) return;
-  lastMouseUpdateTime = now;
-  updateMouse(event.clientX, event.clientY);
-}
-
-function onTouchMove(event) {
-  if (event.touches.length > 0) {
-    const now = performance.now();
-    if (now - lastMouseUpdateTime < MOUSE_UPDATE_INTERVAL) return;
-    lastMouseUpdateTime = now;
-    updateMouse(event.touches[0].clientX, event.touches[0].clientY);
-  }
-}
-
-function updateMouse(x, y) {
-  // Simplified mouse position calculation (no raycasting every frame)
-  mouse.x = (x / window.innerWidth) * 2 - 1;
-  mouse.y = -(y / window.innerHeight) * 2 + 1;
-
-  // Only do raycasting if needed (lazy evaluation)
-  // Calculate approximate 3D position without full raycasting
-  const mouseX = (x / window.innerWidth - 0.5) * 800;
-  const mouseY = -(y / window.innerHeight - 0.5) * 600;
   
-  velocityUniforms.uMouse.value.set(mouseX, mouseY, 0);
-  velocityUniforms.uMouseActive.value = 1.0;
+  renderUniforms.time.value += 0.01 * params.timeScale;
+  updateAudio();
+
+  if (velocityUniforms.uReset.value > 0) velocityUniforms.uReset.value = 0;
+
+  // =================================================================
+  // SCISSOR OPTIMIZATION (The Secret Sauce)
+  // =================================================================
+  // Instead of updating the entire 4096x4096 texture, we only update
+  // the rows that actually contain active particles.
+  
+  // 1. Enable Scissor Test
+  renderer.setScissorTest(true);
+  
+  // 2. Set the Scissor Window (0, 0, Width, NeededHeight)
+  renderer.setScissor(0, 0, MAX_WIDTH, effectiveSimulationHeight);
+  
+  // 3. Compute Physics (Only for the active area)
+  gpuCompute.compute();
+  
+  // 4. Disable Scissor for standard rendering
+  renderer.setScissorTest(false);
+  // =================================================================
+
+  renderUniforms.texturePosition.value = gpuCompute.getCurrentRenderTarget(variablePos).texture;
+  renderUniforms.textureVelocity.value = gpuCompute.getCurrentRenderTarget(variableVel).texture;
+
+  composer.render();
 }
+
+// --- HELPERS ---
 
 function onWindowResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -954,349 +320,141 @@ function onWindowResize() {
   composer.setSize(window.innerWidth, window.innerHeight);
 }
 
-// Global functions for UI interaction
-window.setShape = function (id) {
-  console.log("Setting shape to:", id);
-  currentShape = id;
-  
-  // Check if uniforms are initialized
-  if (velocityUniforms && velocityUniforms.shape) {
-    velocityUniforms.shape.value = id;
-  }
-  if (renderUniforms && renderUniforms.shape) {
-    renderUniforms.shape.value = id; // Update render uniform
-  }
-  
-  // Save to localStorage
-  localStorage.setItem('last_shape', id.toString());
-  
-  // Updated loop to include new shapes (0-36)
-  for (let i = 0; i <= 36; i++) {
-    const btn = document.getElementById(`btn-${i}`);
-    if (btn) btn.classList.remove("active");
-  }
-  const activeBtn = document.getElementById(`btn-${id}`);
-  if (activeBtn) activeBtn.classList.add("active");
-
-  // Show/hide text input
-  const textInput = document.getElementById("textInput");
-  if (id === 4) {
-    textInput.style.display = "block";
-  } else {
-    textInput.style.display = "none";
-  }
-
-  // Auto-hide controls panel after selection
-  const panel = document.getElementById("controls-panel");
-  const toggleBtn = document.getElementById("controls-toggle");
-  if (panel && toggleBtn) {
-    panel.classList.add("hidden");
-    toggleBtn.classList.remove("open");
-  }
-};
-
-window.toggleControls = function () {
-  const panel = document.getElementById("controls-panel");
-  const btn = document.getElementById("controls-toggle");
-  const isHidden = panel.classList.contains("hidden");
-
-  if (isHidden) {
-    panel.classList.remove("hidden");
-    btn.classList.add("open");
-    btn.setAttribute('aria-expanded', 'true'); // Accessibility
-  } else {
-    panel.classList.add("hidden");
-    btn.classList.remove("open");
-    btn.setAttribute('aria-expanded', 'false'); // Accessibility
-  }
-};
-
-window.updateText = function () {
-  const text = document.getElementById("nameInput").value || "HELLO";
-  generateTextTexture(text);
-};
-
-// Settings Functions
-window.toggleSettings = function () {
-  const panel = document.getElementById("settings-panel");
-  const btn = document.getElementById("settings-btn");
-  const isOpen = panel.style.display === "flex";
-  
-  panel.style.display = isOpen ? "none" : "flex";
-  btn.style.transform = isOpen ? "rotate(0deg)" : "rotate(90deg)";
-  btn.setAttribute('aria-expanded', !isOpen); // Accessibility
-};
-
-window.setTheme = function (themeId) {
-  // Check if uniforms are initialized
-  if (renderUniforms && renderUniforms.colorTheme) {
-    renderUniforms.colorTheme.value = themeId;
-  }
-  
-  // Save to localStorage
-  localStorage.setItem('last_theme', themeId.toString());
-  console.log(`🎨 Theme ${themeId} saved`);
-};
-
-// ============================================================================
-// RESTORE USER PREFERENCES
-// ============================================================================
-function restoreUserPreferences() {
-  // Restore last shape
-  const lastShape = localStorage.getItem('last_shape');
-  if (lastShape !== null) {
-    const shapeId = parseInt(lastShape);
-    if (!isNaN(shapeId)) {
-      window.setShape(shapeId);
-      console.log(`🔄 Restored last shape: ${shapeId}`);
-    }
-  }
-  
-  // Restore last theme
-  const lastTheme = localStorage.getItem('last_theme');
-  if (lastTheme !== null) {
-    const themeId = parseInt(lastTheme);
-    if (!isNaN(themeId)) {
-      window.setTheme(themeId);
-      console.log(`🔄 Restored last theme: ${themeId}`);
-    }
-  }
-}
-
-// Note: restoreUserPreferences() is now called at the end of init() after uniforms are ready
-
-// ============================================================================
-// SLIDER UPDATE FUNCTIONS
-// ============================================================================
-let bloomPass; // Reference to bloom pass (set during init)
-
-window.updateBloom = function(value) {
-  const val = parseFloat(value);
-  params.bloomStrength = val;
-  if (bloomPass) bloomPass.strength = val;
-  document.getElementById('bloom-value').textContent = val.toFixed(2);
-};
-
-window.updateBloomRadius = function(value) {
-  const val = parseFloat(value);
-  params.bloomRadius = val;
-  if (bloomPass) bloomPass.radius = val;
-  document.getElementById('radius-value').textContent = val.toFixed(2);
-};
-
-window.updateBloomThreshold = function(value) {
-  const val = parseFloat(value);
-  params.bloomThreshold = val;
-  if (bloomPass) bloomPass.threshold = val;
-  document.getElementById('threshold-value').textContent = val.toFixed(2);
-};
-
-window.updateRotation = function(value) {
-  const val = parseFloat(value);
-  params.rotationSpeed = val;
-  document.getElementById('rotation-value').textContent = val.toFixed(2);
-};
-
-window.updateTimeScale = function(value) {
-  const val = parseFloat(value);
-  params.timeScale = val;
-  document.getElementById('time-value').textContent = val.toFixed(2);
-};
-
-window.updateAudioSensitivity = function(value) {
-  const val = parseFloat(value);
-  params.audioSensitivity = val;
-  document.getElementById('audio-value').textContent = val.toFixed(2);
-};
-
-function generateTextTexture(text) {
-  const canvas = document.createElement("canvas");
-  const size = 2048;
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d");
-
-  ctx.fillStyle = "black";
-  ctx.fillRect(0, 0, size, size);
-
-  ctx.fillStyle = "white";
-  ctx.font = "bold " + size / 4 + "px Arial";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(text.toUpperCase(), size / 2, size / 2);
-
-  const imageData = ctx.getImageData(0, 0, size, size);
-  const data = imageData.data;
-  const validPositions = [];
-
-  for (let y = 0; y < size; y += 4) {
-    for (let x = 0; x < size; x += 4) {
-      const index = (y * size + x) * 4;
-      if (data[index] > 128) {
-        const posX = (x / size - 0.5) * 400;
-        const posY = -(y / size - 0.5) * 400;
-        validPositions.push(posX, posY, 0);
-      }
-    }
-  }
-
-  const particlesData = new Float32Array(WIDTH * WIDTH * 4);
-
-  if (validPositions.length > 0) {
-    for (let i = 0; i < particlesData.length; i += 4) {
-      const targetIndex = (i / 4) % (validPositions.length / 3);
-      const ptr = targetIndex * 3;
-      particlesData[i] = validPositions[ptr];
-      particlesData[i + 1] = validPositions[ptr + 1];
-      particlesData[i + 2] = validPositions[ptr + 2];
-      particlesData[i + 3] = 1.0;
-    }
-  } else {
-    for (let i = 0; i < particlesData.length; i++) particlesData[i] = 0;
-  }
-
-  const texture = new THREE.DataTexture(
-    particlesData,
-    WIDTH,
-    WIDTH,
-    THREE.RGBAFormat,
-    THREE.FloatType
-  );
-  texture.needsUpdate = true;
-
-  velocityUniforms.textTexture.value = texture;
-}
-
-async function animate() { // Changed to async to support await
-  requestAnimationFrame(animate);
-  
-  // Hide loading screen on first frame (Backup if init removal fails)
-  if (isFirstFrame) {
-    isFirstFrame = false;
-    const loadingScreen = document.getElementById('loading-screen');
-    if (loadingScreen && loadingScreen.parentNode && loadingScreen.style.opacity !== '0') {
-      loadingScreen.style.opacity = '0';
-      loadingScreen.style.transition = 'opacity 0.3s';
-      setTimeout(() => { if(loadingScreen.parentNode) loadingScreen.remove(); }, 300);
-    }
-  }
-  
-  // ============================================================================
-  // ADAPTIVE RESOLUTION MONITORING (Reduced frequency)
-  // ============================================================================
-  // Only check every 10 frames to reduce CPU overhead
-  if (Math.random() < 0.1) {
-    const currentFPS = resolutionManager.update();
+function setupInteraction() {
+    window.addEventListener("mousemove", (e) => {
+        const now = performance.now();
+        if (now - lastMouseTime > 16) {
+            const dt = now - lastMouseTime;
+            const dx = e.clientX - lastMouseX;
+            const dy = e.clientY - lastMouseY;
+            velocityUniforms.uMouseVel.value.set(dx / dt, dy / dt);
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
+            lastMouseTime = now;
+            const x = (e.clientX / window.innerWidth - 0.5) * 800;
+            const y = -(e.clientY / window.innerHeight - 0.5) * 600;
+            velocityUniforms.uMouse.value.set(x, y, 0);
+            velocityUniforms.uMouseActive.value = 1.0;
+        }
+    });
     
-    // Update stats display (throttled)
-    const statsDiv = document.getElementById('stats');
-    if (statsDiv) {
-      const profile = resolutionManager.getHardwareProfile();
-      const particles = (PARTICLES / 1000).toFixed(0);
-      statsDiv.textContent = `${WIDTH}x${WIDTH} (${particles}k) @ ${currentFPS.toFixed(0)} FPS | ${profile.deviceTier} Tier | GPU Active`;
-    }
-  }
-  
-  // Check for progressive upgrade (happens once after initial load)
-  if (!isMobile && resolutionManager.checkProgressiveUpgrade()) {
-    WIDTH = resolutionManager.getCurrentResolution();
-    PARTICLES = WIDTH * WIDTH;
-    await regenerateGPGPU();
-  }
-  // Check if resolution needs to change (adaptive performance)
-  else if (resolutionManager.checkAndReset()) {
-    WIDTH = resolutionManager.getCurrentResolution();
-    PARTICLES = WIDTH * WIDTH;
-    await regenerateGPGPU();
-  }
-  
-  // ============================================================================
-  // FIXED TIMESTEP PHYSICS (240Hz support) - GPU ACCELERATED
-  // ============================================================================
-  const currentTime = performance.now();
-  const frameTime = currentTime - lastPhysicsTime;
-  lastPhysicsTime = currentTime;
-  
-  physicsAccumulator += frameTime;
-  
-  // Cap accumulator to prevent spiral of death
-  if (physicsAccumulator > 200) {
-    physicsAccumulator = 200;
-  }
-  
-  // Process physics in fixed steps (on GPU via shaders)
-  while (physicsAccumulator >= FIXED_TIMESTEP) {
-    const dt = FIXED_TIMESTEP / 1000;
-    velocityUniforms.time.value += dt * params.timeScale;
-    physicsAccumulator -= FIXED_TIMESTEP;
-  }
-  
-  // Render time (can run at any framerate)
-  renderUniforms.time.value += 0.01 * params.timeScale;
-
-  // Update Audio (Throttled to every 3rd frame to reduce CPU overhead)
-  if (analyser && audioInitialized && Math.random() < 0.33) {
-    analyser.getByteFrequencyData(dataArray);
-
-    let bassSum = 0, midSum = 0, highSum = 0;
-    let bassCount = 0, midCount = 0, highCount = 0;
-
-    // Optimized loop with reduced iterations
-    for (let i = 0; i < dataArray.length; i += 2) { // Skip every other sample
-      const val = dataArray[i];
-      if (i < 10) {
-        bassSum += val;
-        bassCount++;
-      } else if (i < 100) {
-        midSum += val;
-        midCount++;
-      } else {
-        highSum += val;
-        highCount++;
-      }
-    }
-
-    const bassAvg = bassSum / bassCount;
-    const midAvg = midSum / midCount;
-    const highAvg = highSum / highCount;
-    const sensitivity = params.audioSensitivity;
-
-    const uBassTarget = (bassAvg / 255.0) * sensitivity;
-    const uMidTarget = (midAvg / 255.0) * sensitivity;
-    const uHighTarget = (highAvg / 255.0) * sensitivity;
-    const uSoundTarget = ((bassAvg + midAvg + highAvg) / 3.0 / 255.0) * sensitivity;
-
-    // Smooth transition
-    velocityUniforms.uBass.value += (uBassTarget - velocityUniforms.uBass.value) * 0.2;
-    velocityUniforms.uMid.value += (uMidTarget - velocityUniforms.uMid.value) * 0.2;
-    velocityUniforms.uHigh.value += (uHighTarget - velocityUniforms.uHigh.value) * 0.2;
-    velocityUniforms.uSound.value += (uSoundTarget - velocityUniforms.uSound.value) * 0.2;
-
-    renderUniforms.uSound.value = velocityUniforms.uSound.value;
-    renderUniforms.uBass.value = velocityUniforms.uBass.value;
-    renderUniforms.uMid.value = velocityUniforms.uMid.value;
-    renderUniforms.uHigh.value = velocityUniforms.uHigh.value;
-
-    // Mic Blow Detection
-    if (uHighTarget > 0.8) {
-      velocityUniforms.uBlow.value = 1.0;
-    } else {
-      velocityUniforms.uBlow.value *= 0.9;
-    }
-  }
-
-  // ============================================================================
-  // GPU COMPUTE (Main GPU work happens here)
-  // ============================================================================
-  gpuCompute.compute();
-
-  renderUniforms.texturePosition.value =
-    gpuCompute.getCurrentRenderTarget(variablePos).texture;
-  renderUniforms.textureVelocity.value =
-    gpuCompute.getCurrentRenderTarget(variableVel).texture;
-
-  // Use Composer for Bloom (GPU accelerated post-processing)
-  composer.render();
+    window.addEventListener("mousedown", () => {
+        velocityUniforms.uClick.value = 1.0;
+        initAudio();
+    });
+    window.addEventListener("mouseup", () => {
+        velocityUniforms.uClick.value = 0.0;
+    });
 }
+
+function updateAudio() {
+    if (analyser && audioInitialized) {
+        analyser.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for(let i=0; i<50; i++) sum += dataArray[i];
+        let avg = sum / 50;
+        let sens = params.audioSensitivity;
+        let target = (avg / 255.0) * sens;
+        velocityUniforms.uSound.value += (target - velocityUniforms.uSound.value) * 0.2;
+        velocityUniforms.uBass.value = velocityUniforms.uSound.value; 
+        velocityUniforms.uMid.value = velocityUniforms.uSound.value * 0.8;
+        velocityUniforms.uHigh.value = velocityUniforms.uSound.value * 0.6;
+        renderUniforms.uSound.value = velocityUniforms.uSound.value;
+        renderUniforms.uBass.value = velocityUniforms.uBass.value;
+        renderUniforms.uMid.value = velocityUniforms.uMid.value;
+        renderUniforms.uHigh.value = velocityUniforms.uHigh.value;
+    }
+}
+
+function initAudio() {
+  if (audioInitialized) return;
+  try {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    dataArray = new Uint8Array(analyser.frequencyBinCount);
+    navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+        const source = audioContext.createMediaStreamSource(stream);
+        source.connect(analyser);
+        audioInitialized = true;
+    }).catch(e => console.log("Audio denied"));
+  } catch (e) {}
+}
+
+window.setShape = function(id) {
+    currentShape = id;
+    if(velocityUniforms) velocityUniforms.shape.value = id;
+    if(renderUniforms) renderUniforms.shape.value = id;
+    localStorage.setItem('last_shape', id);
+    document.querySelectorAll('.category-buttons button').forEach(b => b.classList.remove('active'));
+    let btn = document.getElementById(`btn-${id}`);
+    if(btn) btn.classList.add('active');
+    
+    // Always hide controls after selection for immersive view
+    document.getElementById("controls-panel").classList.add("hidden");
+    document.getElementById("controls-toggle").classList.remove("open");
+};
+
+window.toggleControls = function() {
+    const p = document.getElementById("controls-panel");
+    const b = document.getElementById("controls-toggle");
+    p.classList.toggle("hidden");
+    b.classList.toggle("open");
+};
+
+window.toggleSettings = function() {
+    const p = document.getElementById("settings-panel");
+    p.style.display = p.style.display === "flex" ? "none" : "flex";
+};
+
+window.setTheme = function(id) {
+    if(renderUniforms) renderUniforms.colorTheme.value = id;
+};
+
+window.updateBloom = v => {
+    bloomPass.strength = parseFloat(v);
+    const el = document.getElementById('bloom-value');
+    if(el) el.textContent = parseFloat(v).toFixed(2);
+};
+window.updateBloomRadius = v => {
+    bloomPass.radius = parseFloat(v);
+    const el = document.getElementById('radius-value');
+    if(el) el.textContent = parseFloat(v).toFixed(2);
+};
+window.updateBloomThreshold = v => {
+    bloomPass.threshold = parseFloat(v);
+    const el = document.getElementById('threshold-value');
+    if(el) el.textContent = parseFloat(v).toFixed(2);
+};
+window.updateRotation = v => {
+    params.rotationSpeed = parseFloat(v);
+    const el = document.getElementById('rotation-value');
+    if(el) el.textContent = parseFloat(v).toFixed(2);
+};
+window.updateTimeScale = v => {
+    params.timeScale = parseFloat(v);
+    const el = document.getElementById('time-value');
+    if(el) el.textContent = parseFloat(v).toFixed(2);
+};
+window.updateAudioSensitivity = v => {
+    params.audioSensitivity = parseFloat(v);
+    const el = document.getElementById('audio-value');
+    if(el) el.textContent = parseFloat(v).toFixed(2);
+};
+
+// New Sliders
+window.updatePixelRatio = v => {
+    const r = parseFloat(v);
+    if(renderer) renderer.setPixelRatio(r);
+    const el = document.getElementById('pixel-ratio-value');
+    if(el) el.textContent = r.toFixed(3);
+};
+
+window.updateDotSize = v => {
+    const s = parseFloat(v);
+    if(renderUniforms) renderUniforms.size.value = s;
+    const el = document.getElementById('dot-size-value');
+    if(el) el.textContent = s.toFixed(3);
+};
 
 init();

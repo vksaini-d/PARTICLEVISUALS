@@ -45,6 +45,9 @@
         canvas { display: block; }
         #loading-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; display: flex; align-items: center; justify-content: center; z-index: 9999; color: #fff; font-size: 1.2rem; }
         #visitor-counter { position: absolute; bottom: 20px; left: 20px; color: rgba(255,255,255,0.5); font-size: 0.75rem; pointer-events: none; z-index: 100; }
+        
+        /* Particle Count Controls */
+
     </style>
     
     <!-- Deferred CSS -->
@@ -93,7 +96,7 @@
 <div id="controls-panel">
     <div class="panel-header">
         <div class="panel-title">Select Shape</div>
-        <div style="font-size: 0.7rem; color: rgba(255, 255, 255, 0.4);">360k Particles</div>
+        <div id="particle-header-display" style="font-size: 0.7rem; color: rgba(255, 255, 255, 0.4);">360k Particles</div>
     </div>
     
     <div class="controls">
@@ -200,10 +203,46 @@
 
 <!-- Settings Panel -->
 <div id="settings-panel">
+
+    <!-- Particle Count (Performance) -->
+    <div class="settings-section">
+        <div class="section-title">🚀 Performance</div>
+        
+        <div class="slider-control" style="flex-direction: column; align-items: flex-start;">
+            <label for="particle-input">
+                <span class="slider-label">Particle Count</span>
+                <span class="slider-value" id="particle-value-display">260k</span>
+            </label>
+            <div style="display: flex; gap: 10px; width: 100%; margin-top: 5px;">
+                <input type="number" id="particle-input" value="260000" step="1000" style="flex: 1; padding: 5px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 4px;">
+                <button onclick="applyParticleCount()" style="padding: 5px 15px; background: white; color: black; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Set</button>
+            </div>
+            <p style="font-size: 0.7rem; color: #888; margin-top: 5px;">Warning: >4M may freeze device</p>
+        </div>
+
+        <div class="slider-control">
+            <label for="pixel-ratio">
+                <span class="slider-label">Pixel Ratio</span>
+                <span class="slider-value" id="pixel-ratio-value">1.000</span>
+            </label>
+            <input type="range" id="pixel-ratio" min="0.001" max="3" step="0.001" value="1" 
+                   oninput="updatePixelRatio(this.value)">
+        </div>
+    </div>
+
     <!-- Visuals Section -->
     <div class="settings-section">
         <div class="section-title">⚡ Visuals</div>
         
+        <div class="slider-control">
+            <label for="dot-size">
+                <span class="slider-label">Dot Size</span>
+                <span class="slider-value" id="dot-size-value">0.600</span>
+            </label>
+            <input type="range" id="dot-size" min="0.001" max="5" step="0.001" value="0.6" 
+                   oninput="updateDotSize(this.value)">
+        </div>
+
         <div class="slider-control">
             <label for="bloom-strength">
                 <span class="slider-label">Bloom Strength</span>
@@ -268,7 +307,7 @@
                    oninput="updateAudioSensitivity(this.value)">
         </div>
     </div>
-    
+
     <!-- Color Themes Section -->
     <div class="settings-section">
         <div class="section-title">🎨 Color Themes</div>
@@ -422,6 +461,24 @@
   }
 </script>
 
-<script type="module" src="js/main.js?v=2.2"></script>
+<script type="module" src="js/main.js?v=2.3"></script>
+<script>
+    // --- Particle Count Control ---
+    function applyParticleCount() {
+        // Find input
+        const input = document.getElementById('particle-input');
+        if(!input) return;
+        
+        const count = input.value;
+        if (window.setParticleCount) {
+            window.setParticleCount(count);
+            // Update display label if exists
+            const display = document.getElementById('particle-value-display');
+            if(display) display.textContent = (count / 1000).toFixed(0) + 'k';
+        } else {
+            console.warn("Particle system not ready yet or setParticleCount missing.");
+        }
+    }
+</script>
 </body>
 </html>

@@ -4,11 +4,7 @@ body {
   background-color: #000000;
   font-family: "Segoe UI", sans-serif;
 }
-  left: 20px;
-  color: rgba(255, 255, 255, 0.8);
-  pointer-events: none;
-  z-index: 10;
-}
+
 
 h1 {
   margin: 0;
@@ -44,6 +40,7 @@ p {
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 1px;
+  opacity: 0.4; /* Fade out when idle */
 }
 
 #controls-toggle:hover {
@@ -51,6 +48,7 @@ p {
   border-color: rgba(255, 255, 255, 0.5);
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  opacity: 1; /* Reappear on hover */
 }
 
 #controls-toggle svg {
@@ -201,12 +199,14 @@ input[type="text"]::placeholder {
   padding: 12px;
   border-radius: 8px;
   transition: all 0.3s ease;
+  opacity: 0.4; /* Fade out when idle */
 }
 #settings-btn:hover {
   background: rgba(255, 255, 255, 0.2);
   border-color: rgba(255, 255, 255, 0.5);
   transform: translateY(-2px) rotate(90deg);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  opacity: 1; /* Reappear on hover */
 }
 
 #settings-panel {
