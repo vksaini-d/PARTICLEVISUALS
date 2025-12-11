@@ -23,39 +23,42 @@ window.onerror = function(message, source, lineno, colno, error) {
 const MAX_WIDTH = 4096; 
 const MAX_PARTICLES = MAX_WIDTH * MAX_WIDTH;
 
-// 2. REASONABLE START: Start with just 100k to ensure instant load on i3-5005U
+// 2. REASONABLE START: Start with just 100k 
 let currentActiveCount = 100000; 
 
 // Track how much of the texture we actually need to process
 let effectiveSimulationHeight = Math.ceil(currentActiveCount / MAX_WIDTH);
 
+
 // --- PARTICLE CONTROLLER ---
-window.setParticleCount = function(count) {
-    count = parseInt(count);
+// Controls the particle count. Try not to fry the user's GPU.
+window.setParticleCount = (rawCount) => {
+    let count = parseInt(rawCount);
     
-    // Allow going up to the massive limit
-    if (count > MAX_PARTICLES) count = MAX_PARTICLES;
-    if (count < 64) count = 64;
+    // Sanity checks: Clamp between 64 and our massive ceiling
+    
+    count = Math.min(Math.max(count, 64), MAX_PARTICLES);
 
     currentActiveCount = count;
     
-    // OPTIMIZATION: Calculate how many rows of pixels we actually need to update
+    // PERF: Only calc simulation height for what we actually need.
+    // No point simulating empty sky.
     effectiveSimulationHeight = Math.ceil(currentActiveCount / MAX_WIDTH);
     
-    // 1. Tell the Renderer to draw fewer points
-    if (particles && particles.geometry) {
+    // update the draw range so we don't render invisible points
+    if (particles?.geometry) { // Optional chaining FTW
         particles.geometry.setDrawRange(0, currentActiveCount);
     }
     
-    console.log(`⚡ Updated: ${count.toLocaleString()} particles (Processing ${effectiveSimulationHeight}/${MAX_WIDTH} rows)`);
+    console.log(`[System] Active particles: ${count.toLocaleString()} (Rows: ${effectiveSimulationHeight})`);
     
-    
-    // Update display text
+    // Update the UI if it exists
     if (window.updateParticleCountDisplay) {
         window.updateParticleCountDisplay(count);
     } else {
+        // Fallback for when the UI isn't ready yet
         const statsDiv = document.getElementById('particle-value-display');
-        if (statsDiv) statsDiv.textContent = (count / 1000).toFixed(0) + 'k';
+        if (statsDiv) statsDiv.textContent = `${(count / 1000).toFixed(0)}k`;
     }
 };
 
@@ -320,50 +323,77 @@ function onWindowResize() {
   composer.setSize(window.innerWidth, window.innerHeight);
 }
 
-function setupInteraction() {
+const setupInteraction = () => {
+    // Tracks mouse movement. We throttle this to ~60fps to save cycles.
     window.addEventListener("mousemove", (e) => {
         const now = performance.now();
-        if (now - lastMouseTime > 16) {
-            const dt = now - lastMouseTime;
-            const dx = e.clientX - lastMouseX;
-            const dy = e.clientY - lastMouseY;
-            velocityUniforms.uMouseVel.value.set(dx / dt, dy / dt);
-            lastMouseX = e.clientX;
-            lastMouseY = e.clientY;
-            lastMouseTime = now;
-            const x = (e.clientX / window.innerWidth - 0.5) * 800;
-            const y = -(e.clientY / window.innerHeight - 0.5) * 600;
-            velocityUniforms.uMouse.value.set(x, y, 0);
-            velocityUniforms.uMouseActive.value = 1.0;
+        if (now - lastMouseTime < 16) return; // Skip if too fast
+
+        const dt = now - lastMouseTime;
+        const dx = e.clientX - lastMouseX;
+        const dy = e.clientY - lastMouseY;
+
+        // Calculate velocity
+        if (dt > 0) {
+             velocityUniforms.uMouseVel.value.set(dx / dt, dy / dt);
         }
+
+        lastMouseX = e.clientX;
+        lastMouseY = e.clientY;
+        lastMouseTime = now;
+
+        // Convert to Normalized Device Coordinates (NDC) for the shader
+        // Range: -1 to 1 (roughly, scaled by our arbitrary factors)
+        const ndcX = (e.clientX / window.innerWidth - 0.5) * 800; // 800 is a "magic number" that feels right
+        const ndcY = -(e.clientY / window.innerHeight - 0.5) * 600; 
+
+        velocityUniforms.uMouse.value.set(ndcX, ndcY, 0);
+        velocityUniforms.uMouseActive.value = 1.0;
     });
     
+    // Simple click handlers
     window.addEventListener("mousedown", () => {
         velocityUniforms.uClick.value = 1.0;
-        initAudio();
+        // Audio context needs a user gesture to start, so do it here.
+        initAudio(); 
     });
+
     window.addEventListener("mouseup", () => {
         velocityUniforms.uClick.value = 0.0;
     });
 }
 
+// Smoothly interpolates audio data to prevent jittery visuals
 function updateAudio() {
-    if (analyser && audioInitialized) {
-        analyser.getByteFrequencyData(dataArray);
-        let sum = 0;
-        for(let i=0; i<50; i++) sum += dataArray[i];
-        let avg = sum / 50;
-        let sens = params.audioSensitivity;
-        let target = (avg / 255.0) * sens;
-        velocityUniforms.uSound.value += (target - velocityUniforms.uSound.value) * 0.2;
-        velocityUniforms.uBass.value = velocityUniforms.uSound.value; 
-        velocityUniforms.uMid.value = velocityUniforms.uSound.value * 0.8;
-        velocityUniforms.uHigh.value = velocityUniforms.uSound.value * 0.6;
-        renderUniforms.uSound.value = velocityUniforms.uSound.value;
-        renderUniforms.uBass.value = velocityUniforms.uBass.value;
-        renderUniforms.uMid.value = velocityUniforms.uMid.value;
-        renderUniforms.uHigh.value = velocityUniforms.uHigh.value;
-    }
+    if (!analyser || !audioInitialized) return;
+
+    analyser.getByteFrequencyData(dataArray);
+
+    // Grab the lower frequencies (bass/mid) - first 50 bins usually does the trick
+    let sum = 0;
+    const SAMPLE_SIZE = 50; 
+    for(let i=0; i<SAMPLE_SIZE; i++) sum += dataArray[i];
+
+    const avg = sum / SAMPLE_SIZE;
+    const sens = params.audioSensitivity;
+    
+    // Normalize to 0-1 range and apply sensitivity
+    const target = (avg / 255.0) * sens;
+
+    // Linear interpolation (Lerp) for smoothness
+    // 0.2 is the "smoothing factor" - lower is smoother/slower
+    velocityUniforms.uSound.value += (target - velocityUniforms.uSound.value) * 0.2;
+
+    // Distribute to bands (these are approximate ratios)
+    velocityUniforms.uBass.value = velocityUniforms.uSound.value; 
+    velocityUniforms.uMid.value = velocityUniforms.uSound.value * 0.8;
+    velocityUniforms.uHigh.value = velocityUniforms.uSound.value * 0.6;
+
+    // Sync render uniforms
+    renderUniforms.uSound.value = velocityUniforms.uSound.value;
+    renderUniforms.uBass.value = velocityUniforms.uBass.value;
+    renderUniforms.uMid.value = velocityUniforms.uMid.value;
+    renderUniforms.uHigh.value = velocityUniforms.uHigh.value;
 }
 
 function initAudio() {

@@ -1,10 +1,18 @@
+/* 
+  Main Stylesheet
+  Theme: Dark Mode Only (OLED optimized)
+*/
 body {
   margin: 0;
-  overflow: hidden;
+  overflow: hidden; /* Prevent scrollbars during canvas resize */
   background-color: #000000;
   font-family: "Segoe UI", sans-serif;
-}
 
+  /* Prevent bounce effect on iOS */
+  position: fixed;
+  width: 100%;
+  height: 100%;
+}
 
 h1 {
   margin: 0;
@@ -67,7 +75,11 @@ p {
   top: 80px;
   left: 20px;
   background: rgba(0, 0, 0, 0.95);
+
+  /* Safari sometimes glitches with blur, this hack fixes it */
+  -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
+
   border: 1px solid rgba(255, 255, 255, 0.2);
   padding: 20px;
   border-radius: 12px;
@@ -268,7 +280,7 @@ input[type="text"]::placeholder {
 .slider-value {
   font-size: 0.75rem;
   color: rgba(0, 255, 200, 0.9);
-  font-family: 'Courier New', monospace;
+  font-family: "Courier New", monospace;
   font-weight: 600;
   min-width: 45px;
   text-align: right;
@@ -396,7 +408,7 @@ input[type="range"]::-moz-range-thumb:hover {
   color: rgba(255, 255, 255, 0.4);
   font-size: 0.7rem;
   text-align: right;
-  font-family: 'Courier New', monospace;
+  font-family: "Courier New", monospace;
   pointer-events: none;
   z-index: 100;
 }
@@ -410,11 +422,19 @@ input[type="range"]::-moz-range-thumb:hover {
   border-radius: 3px;
 }
 #settings-panel::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, rgba(0, 255, 200, 0.5), rgba(0, 136, 255, 0.5));
+  background: linear-gradient(
+    180deg,
+    rgba(0, 255, 200, 0.5),
+    rgba(0, 136, 255, 0.5)
+  );
   border-radius: 3px;
 }
 #settings-panel::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, rgba(0, 255, 200, 0.7), rgba(0, 136, 255, 0.7));
+  background: linear-gradient(
+    180deg,
+    rgba(0, 255, 200, 0.7),
+    rgba(0, 136, 255, 0.7)
+  );
 }
 
 /* ========================================
@@ -428,21 +448,21 @@ input[type="range"]::-moz-range-thumb:hover {
     max-height: 60vh;
     font-size: 0.9rem;
   }
-  
+
   .category-buttons {
     gap: 6px;
   }
-  
+
   button {
     padding: 8px 14px;
     font-size: 0.7rem;
   }
-  
+
   #settings-panel {
     width: 200px;
     max-height: 70vh;
   }
-  
+
   #info-bar {
     font-size: 0.65rem;
     max-width: 90%;
@@ -455,7 +475,7 @@ input[type="range"]::-moz-range-thumb:hover {
     max-width: 50vw;
     max-height: 70vh;
   }
-  
+
   #info-bar {
     bottom: 10px;
     left: 10px;
@@ -471,12 +491,12 @@ input[type="range"]::-moz-range-thumb:hover {
     padding: 10px 14px;
     font-size: 0.7rem;
   }
-  
+
   #controls-toggle svg {
     width: 18px;
     height: 18px;
   }
-  
+
   #controls-panel {
     top: 60px;
     left: 10px;
@@ -485,47 +505,47 @@ input[type="range"]::-moz-range-thumb:hover {
     max-height: 65vh;
     padding: 15px;
   }
-  
+
   .panel-header {
     flex-direction: column;
     align-items: flex-start;
     gap: 5px;
   }
-  
+
   .panel-title {
     font-size: 0.85rem;
   }
-  
+
   .controls {
     max-height: 50vh;
   }
-  
+
   .category-title {
     font-size: 0.6rem;
     margin-bottom: 6px;
   }
-  
+
   .category-buttons {
     gap: 5px;
   }
-  
+
   button {
     padding: 8px 12px;
     font-size: 0.65rem;
     border-radius: 6px;
   }
-  
+
   #settings-btn {
     top: 10px;
     right: 10px;
     padding: 10px;
   }
-  
+
   #settings-btn svg {
     width: 22px;
     height: 22px;
   }
-  
+
   #settings-panel {
     top: 60px;
     right: 10px;
@@ -535,45 +555,45 @@ input[type="range"]::-moz-range-thumb:hover {
     max-height: 70vh;
     padding: 15px;
   }
-  
+
   #settings-panel::before {
     font-size: 0.7rem;
   }
-  
+
   .color-option {
     padding: 12px 10px;
     border-radius: 10px;
   }
-  
+
   .color-preview {
     width: 32px;
     height: 32px;
   }
-  
+
   .option-label {
     font-size: 0.7rem;
   }
-  
+
   .section-title {
     font-size: 0.6rem;
     margin-top: 12px;
   }
-  
+
   #info-bar {
     display: none; /* Hide on small screens to save space */
   }
-  
+
   #stats {
     bottom: 10px;
     right: 10px;
     font-size: 0.6rem;
   }
-  
+
   #textInput input[type="text"] {
     width: 100%;
     font-size: 0.75rem;
   }
-  
+
   #visitor-counter {
     bottom: 10px;
     left: 10px;
@@ -589,11 +609,11 @@ input[type="range"]::-moz-range-thumb:hover {
     max-width: 45vw;
     max-height: 75vh;
   }
-  
+
   #settings-panel {
     max-height: 75vh;
   }
-  
+
   #info-bar {
     display: none;
   }
@@ -605,67 +625,63 @@ input[type="range"]::-moz-range-thumb:hover {
     padding: 8px 12px;
     font-size: 0.65rem;
   }
-  
+
   #controls-toggle span {
     display: none; /* Hide "Shapes" text on very small screens */
   }
-  
+
   #controls-panel {
     padding: 12px;
     max-height: 70vh;
   }
-  
+
   .panel-title {
     font-size: 0.8rem;
   }
-  
+
   .category-title {
     font-size: 0.55rem;
   }
-  
+
   button {
     padding: 10px 12px;
     font-size: 0.6rem;
     min-height: 40px;
   }
-  
+
   #settings-panel {
     padding: 12px;
   }
-  
+
   #settings-panel::before {
     font-size: 0.65rem;
   }
-  
+
   .color-option {
     padding: 10px 8px;
     min-height: 48px;
   }
-  
+
   .option-label {
     font-size: 0.65rem;
   }
-  
+
   .color-preview {
     width: 30px;
     height: 30px;
   }
-  
+
   .section-title {
     font-size: 0.55rem;
   }
 }
 
 /* iPad Pro (Portrait & Landscape) */
-@media only screen 
-  and (min-width: 1024px) 
-  and (max-width: 1366px) 
-  and (-webkit-min-device-pixel-ratio: 2) {
-  
+@media only screen and (min-width: 1024px) and (max-width: 1366px) and (-webkit-min-device-pixel-ratio: 2) {
   #controls-panel {
     max-width: 650px;
   }
-  
+
   button {
     padding: 8px 16px;
     font-size: 0.7rem;
@@ -678,28 +694,28 @@ input[type="range"]::-moz-range-thumb:hover {
     min-height: 44px; /* Apple's recommended touch target size */
     min-width: 44px;
   }
-  
+
   .color-option {
     min-height: 44px;
   }
-  
+
   #controls-toggle {
     min-height: 44px;
     min-width: 44px;
   }
-  
+
   #settings-btn {
     min-height: 44px;
     min-width: 44px;
   }
-  
+
   /* Prevent text selection on touch devices */
   * {
     -webkit-tap-highlight-color: rgba(255, 255, 255, 0.1);
     -webkit-touch-callout: none;
     user-select: none;
   }
-  
+
   input[type="text"] {
     user-select: text;
     -webkit-user-select: text;
@@ -708,9 +724,10 @@ input[type="range"]::-moz-range-thumb:hover {
 
 /* High DPI displays (Retina) */
 @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
-  button, .color-option, .panel-title {
+  button,
+  .color-option,
+  .panel-title {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 }
-
